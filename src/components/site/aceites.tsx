@@ -1,3 +1,5 @@
+"use client"
+
 import Link from "next/link"
 import { ACEITES } from "@/lib/jabones"
 import { Button } from "@/components/ui/button"
