@@ -1,3 +1,5 @@
+"use client"
+
 import { CreditCard, Truck, HeartHandshake, Gift } from "lucide-react"
 
 export function InfoPagos() {
