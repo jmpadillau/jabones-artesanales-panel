@@ -1,105 +1,71 @@
-import Image from "next/image"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { ArrowDown } from "lucide-react"
-
-const familiasPiel = [
-  {
-    id: "grasa-mixta",
-    nombre: "Grasa, Mixta o con Tendencia al Acné",
-    descripcion: "Controla el brillo, minimiza los poros y equilibra la piel con tendencia al acné.",
-    colorHex: "#e69d24",
-  },
-  {
-    id: "sensible",
-    nombre: "Sensible, Irritada o con Afecciones Cutáneas",
-    descripcion: "Calma irritaciones y rojeces con fórmulas suaves, naturales y equilibrantes.",
-    colorHex: "#9b51e0",
-  },
-  {
-    id: "madura",
-    nombre: "Madura o con Pérdida de Firmeza",
-    descripcion: "Aporta firmeza y luminosidad, y ayuda a suavizar las líneas de expresión.",
-    colorHex: "#e91e63",
-  },
-  {
-    id: "seca",
-    nombre: "Seca o con Pérdida de Hidratación",
-    descripcion: "Nutrición profunda para restaurar la barrera cutánea e hidratación duradera.",
-    colorHex: "#2196f3",
-  },
-]
+import Image from "next/image";
+import { ArrowDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { TIPOS_PIEL } from "@/lib/jabones";
 
 export function GuiaBotanica() {
   return (
-    <section id="guia-botanica" className="py-16 bg-[#f9f6f0]">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-          
-          {/* Imagen Oficial del Catálogo */}
-          <div className="lg:col-span-5">
-            <div className="relative aspect-[4/3] w-full rounded-2xl overflow-hidden shadow-md border border-[#e5ded0]">
-              <Image
-                src="/images/catalogo-botanico.jpg"
-                alt="Catálogo Botánico By-Sil"
-                fill
-                className="object-cover"
-              />
-            </div>
-            <p className="text-center text-xs text-[#8c7a6b] mt-3 italic">
-              Catálogo botánico de referencia · Esencias y aromas por tipo de piel
-            </p>
+    <section id="guia" className="scroll-mt-20 bg-arena/60 py-16 sm:py-24">
+      <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 sm:px-6 lg:grid-cols-2 lg:gap-14">
+        <figure className="relative order-2 lg:order-1">
+          <div
+            className="absolute -inset-3 rounded-[2.2rem] bg-salvia/10 blur-xl"
+            aria-hidden
+          />
+          <div className="relative overflow-hidden rounded-[2rem] border-4 border-card shadow-lg">
+            <Image
+              src="/images/catalogo-botanico.jpg"
+              alt="Catálogo botánico: tipos de piel con sus aceites esenciales y aromas recomendados"
+              width={1706}
+              height={959}
+              className="h-auto w-full object-cover"
+            />
           </div>
+          <figcaption className="mt-3 text-center text-xs text-muted-foreground">
+            Catálogo botánico de referencia · Esencias y aromas por tipo de piel
+          </figcaption>
+        </figure>
 
-          {/* Contenido descriptivo */}
-          <div className="lg:col-span-7 space-y-6">
-            <div>
-              <span className="text-xs font-semibold tracking-widest text-[#8c7a6b] uppercase block mb-2">
-                Guía Botánica
-              </span>
-              <h2 className="font-serif text-3xl sm:text-4xl font-bold text-[#2d4a3e] leading-tight">
-                Encuentra tu jabón ideal, renueva tu piel
-              </h2>
-            </div>
+        <div className="order-1 lg:order-2">
+          <p className="mb-3 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-salvia">
+            Guía botánica
+          </p>
+          <h2 className="font-display text-3xl font-semibold tracking-tight text-primary sm:text-4xl lg:text-5xl">
+            Encuentra tu jabón ideal, renueva tu piel
+          </h2>
+          <p className="mt-4 leading-relaxed text-muted-foreground">
+            Cada tipo de piel pide ingredientes distintos. Por eso organizamos
+            nuestro catálogo en tres familias: al elegir la tuya en el
+            configurador, solo verás los aceites esenciales y aromas que la
+            benefician, tal como aparece en nuestro catálogo botánico.
+          </p>
 
-            <p className="text-base text-[#5a6b5c] leading-relaxed">
-              Cada tipo de piel pide ingredientes distintos. Por eso organizamos nuestro catálogo en cuatro familias: al elegir la tuya en el configurador, solo verás los aceites esenciales que la benefician, tal como aparece en nuestro catálogo botánico.
-            </p>
-
-            <div className="space-y-4 pt-2">
-              {familiasPiel.map((familia) => (
-                <div key={familia.id} className="flex items-start gap-3">
-                  <span
-                    className="h-3 w-3 rounded-full mt-1.5 shrink-0"
-                    style={{ backgroundColor: familia.colorHex }}
-                  />
-                  <div>
-                    <h4 className="font-bold text-sm text-[#2d4a3e]">
-                      {familia.nombre}
-                    </h4>
-                    <p className="text-xs text-[#6b7c6d]">
-                      {familia.descripcion}
-                    </p>
-                  </div>
+          <ul className="mt-7 space-y-3.5">
+            {TIPOS_PIEL.map((t) => (
+              <li key={t.id} className="flex items-start gap-3">
+                <span
+                  className="mt-1.5 h-3.5 w-3.5 shrink-0 rounded-full ring-4 ring-background"
+                  style={{ backgroundColor: t.color }}
+                  aria-hidden
+                />
+                <div>
+                  <p className="font-semibold text-foreground">{t.nombre}</p>
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    {t.descripcion}
+                  </p>
                 </div>
-              ))}
-            </div>
+              </li>
+            ))}
+          </ul>
 
-            <div className="pt-4">
-              <Button
-                asChild
-                className="bg-[#2d4a3e] hover:bg-[#1e3329] text-white rounded-full px-6 py-2.5 text-sm font-medium"
-              >
-                <Link href="#configurador" className="flex items-center gap-2">
-                  <span>Probar el configurador</span>
-                  <ArrowDown className="h-4 w-4" />
-                </Link>
-              </Button>
-            </div>
-          </div>
-
+          <a href="#configurar" className="mt-8 inline-block">
+            <Button size="lg" className="rounded-full shadow-md">
+              Probar el configurador
+              <ArrowDown className="h-4 w-4" aria-hidden />
+            </Button>
+          </a>
         </div>
       </div>
     </section>
-  )
+  );
 }

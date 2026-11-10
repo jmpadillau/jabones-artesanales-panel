@@ -1,120 +1,122 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import Image from "next/image"
-import Link from "next/link"
-import { Menu, X, MessageCircle } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { useEffect, useState } from "react";
+import Image from "next/image";
+import { Menu, MessageCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import { MARCA, MARCA_LARGA, enlaceWhatsApp } from "@/lib/jabones";
 
-const navLinks = [
-  { href: "#configurador", label: "Crear mi jabón" },
-  { href: "#guia-botanica", label: "Guía botánica" },
+const LINKS = [
+  { href: "#configurar", label: "Crear mi jabón" },
+  { href: "#guia", label: "Guía botánica" },
   { href: "#aceites", label: "Aceites" },
   { href: "#aromas", label: "Aromas" },
-  { href: "#pagos", label: "Pagos y envíos" },
-]
+  { href: "#info", label: "Pagos y envíos" },
+];
 
-export function Header() {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+export function Header({ whatsapp }: { whatsapp: string }) {
+  const [conSombra, setConSombra] = useState(false);
+  const [abierto, setAbierto] = useState(false);
+
+  useEffect(() => {
+    const alDesplazar = () => setConSombra(window.scrollY > 12);
+    alDesplazar();
+    window.addEventListener("scroll", alDesplazar, { passive: true });
+    return () => window.removeEventListener("scroll", alDesplazar);
+  }, []);
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-[#e5ded0] bg-[#f9f6f0]/90 backdrop-blur-md transition-all">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-        
-        {/* Logo de la marca */}
-        <Link href="/" className="flex items-center gap-3 group">
-          <div className="relative h-14 w-14 sm:h-16 sm:w-16 transition-transform duration-300 group-hover:scale-105">
-            <Image
-              src="/logo.png"
-              alt="Logo By-Sil Jabones Artesanales"
-              fill
-              className="object-contain"
-              priority
-            />
-          </div>
-          <div className="flex flex-col">
-            <span className="font-serif text-xl sm:text-2xl font-bold tracking-tight text-[#2d4a3e]">
-              By-Sil
-            </span>
-            <span className="text-[10px] sm:text-xs font-semibold tracking-widest text-[#8c7a6b] uppercase">
+    <header
+      className={`sticky top-0 z-50 border-b bg-crema/90 backdrop-blur-md transition-shadow ${
+        conSombra ? "border-border shadow-sm" : "border-transparent"
+      }`}
+    >
+      <div className="mx-auto flex h-20 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
+        <a
+          href="#inicio"
+          className="flex items-center gap-2.5"
+          aria-label={`${MARCA_LARGA} — inicio`}
+        >
+          <Image
+            src="/logo.png"
+            alt="Logo de By-Sil: colibrí y flor de cala"
+            width={96}
+            height={96}
+            className="h-14 w-14 rounded-full border-2 border-secondary bg-card object-cover shadow-sm sm:h-16 sm:w-16"
+          />
+          <span className="font-display text-2xl font-semibold leading-none tracking-tight text-primary">
+            {MARCA}
+            <span className="mt-0.5 block text-xs font-normal uppercase tracking-[0.18em] text-muted-foreground">
               Jabones Artesanales
             </span>
-          </div>
-        </Link>
+          </span>
+        </a>
 
-        {/* Navegación Desktop */}
-        <nav className="hidden md:flex items-center gap-6">
-          {navLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="text-sm font-medium text-[#4a5d4e] hover:text-[#1e3329] transition-colors"
+        <nav className="hidden items-center gap-6 lg:flex" aria-label="Principal">
+          {LINKS.map((l) => (
+            <a
+              key={l.href}
+              href={l.href}
+              className="text-sm font-medium text-foreground/80 transition-colors hover:text-primary"
             >
-              {link.label}
-            </Link>
+              {l.label}
+            </a>
           ))}
         </nav>
 
-        {/* Botón WhatsApp Header */}
-        <div className="hidden md:flex items-center gap-3">
-          <Button
-            asChild
-            className="bg-[#2d4a3e] hover:bg-[#1e3329] text-white font-medium rounded-full px-5 py-2 text-sm shadow-sm transition-all"
+        <div className="flex items-center gap-2">
+          <a
+            href={enlaceWhatsApp(whatsapp, "¡Hola! Quisiera información sobre sus jabones artesanales \u{1f33f}")}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hidden sm:inline-flex"
           >
-            <a
-              href="https://wa.me/50688419135"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2"
-            >
-              <MessageCircle className="h-4 w-4" />
-              <span>WhatsApp</span>
-            </a>
-          </Button>
-        </div>
-
-        {/* Botón Menú Móvil */}
-        <button
-          type="button"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="md:hidden p-2 text-[#2d4a3e] hover:bg-[#eae3d2] rounded-lg transition-colors"
-          aria-label="Abrir menú"
-        >
-          {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-        </button>
-      </div>
-
-      {/* Menú Desplegable Móvil */}
-      {mobileMenuOpen && (
-        <div className="md:hidden border-t border-[#e5ded0] bg-[#f9f6f0] px-4 pt-3 pb-6 space-y-3">
-          {navLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              onClick={() => setMobileMenuOpen(false)}
-              className="block py-2 text-base font-medium text-[#2d4a3e] hover:text-[#1e3329]"
-            >
-              {link.label}
-            </Link>
-          ))}
-          <div className="pt-2">
-            <Button
-              asChild
-              className="w-full bg-[#2d4a3e] hover:bg-[#1e3329] text-white font-medium rounded-full py-2.5"
-            >
-              <a
-                href="https://wa.me/50688419135"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2"
-              >
-                <MessageCircle className="h-4 w-4" />
-                <span>Contactar por WhatsApp</span>
-              </a>
+            <Button size="sm" className="rounded-full">
+              <MessageCircle className="h-4 w-4" aria-hidden />
+              WhatsApp
             </Button>
-          </div>
+          </a>
+
+          <Sheet open={abierto} onOpenChange={setAbierto}>
+            <SheetTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="rounded-xl lg:hidden"
+                aria-label="Abrir menú"
+              >
+                <Menu className="h-5 w-5" aria-hidden />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-72">
+              <SheetHeader>
+                <SheetTitle className="font-display text-primary">
+                  {MARCA_LARGA}
+                </SheetTitle>
+              </SheetHeader>
+              <nav className="mt-2 flex flex-col gap-1 px-4" aria-label="Menú móvil">
+                {LINKS.map((l) => (
+                  <a
+                    key={l.href}
+                    href={l.href}
+                    onClick={() => setAbierto(false)}
+                    className="rounded-xl px-3 py-3 text-base font-medium transition-colors hover:bg-secondary"
+                  >
+                    {l.label}
+                  </a>
+                ))}
+              </nav>
+            </SheetContent>
+          </Sheet>
         </div>
-      )}
+      </div>
     </header>
-  )
+  );
 }

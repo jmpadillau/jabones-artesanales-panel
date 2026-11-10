@@ -141,3 +141,7 @@ export const TAMANOS: TamanoJabones[] = [
   { id: "3", gramos: 100, precio: 2000, etiqueta: "CLÁSICO" },
   { id: "4", gramos: 150, precio: 3000, etiqueta: "GRANDE" },
 ]
+
+export function nombreProducto(tamanoGramos: number, aceiteNombre: string) {
+  return `Jabón de ${aceiteNombre} (${tamanoGramos}g)`
+}
