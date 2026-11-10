@@ -1,973 +1,648 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import Image from "next/image";
-import {
-  Check,
-  Copy,
-  Flower2,
-  Leaf,
-  MessageCircle,
-  Minus,
-  MousePointerClick,
-  PackageOpen,
-  Plus,
-  RotateCcw,
-  Scale,
-  ShoppingBag,
-  Sparkles,
-  Trash2,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Separator } from "@/components/ui/separator";
-import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
-import {
-  construirMensajePedido,
-  formatoCRC,
-  generarIdPedido,
-  enlaceWhatsApp,
-  METODOS_PAGO,
-  nombreProducto,
-  propiedadesDe,
-  subtotalLinea,
-  SORPRENDEME,
-  TAMANOS,
-  TIPOS_PIEL,
-  totalPedido,
-  unidadesPedido,
-  type DatosCliente,
-  type LineaPedido,
-  type MetodoPago,
-  type Tamano,
-  type TipoPiel,
-} from "@/lib/jabones";
+import { useState } from "react"
+import { Sparkles, ShoppingBag, Trash2, Check, Send, Copy, RotateCcw } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { useToast } from "@/hooks/use-toast"
+import { TIPOS_PIEL, AROMAS, TAMANOS, ACEITES } from "@/lib/jabones"
 
-/** Línea del carrito: los datos del jabón + identificador local. */
-type LineaCarrito = LineaPedido & { id: string };
+interface ItemPedido {
+  id: string
+  tipoPielId: string
+  tipoPielNombre: string
+  aceiteId: string
+  aceiteNombre: string
+  aromaId: string
+  aromaNombre: string
+  tamanoId: string
+  tamanoGramos: number
+  precioUnitario: number
+  cantidad: number
+}
 
-/** Contador local para dar un identificador a cada línea agregada. */
-let contadorLineas = 0;
+export function Configurator() {
+  const { toast } = useToast()
 
-export function Configurator({ whatsapp }: { whatsapp: string }) {
-  // ====== Selección en curso (el "constructor" de una línea) ======
-  const [piel, setPiel] = useState<TipoPiel | null>(null);
-  const [aceite, setAceite] = useState<string | null>(null);
-  const [aroma, setAroma] = useState<string | null>(null);
-  const [tamano, setTamano] = useState<Tamano | null>(null);
-  const [cantidad, setCantidad] = useState(1);
+  // Selección en progreso
+  const [selectedPiel, setSelectedPiel] = useState<string>("grasa-mixta")
+  const [selectedAceite, setSelectedAceite] = useState<string>("1") // Zacate de Limón por defecto
+  const [selectedAroma, setSelectedAroma] = useState<string>("3") // Lemon Grass por defecto
+  const [selectedTamano, setSelectedTamano] = useState<string>("3") // 100g por defecto
+  const [cantidad, setCantidad] = useState<number>(1)
 
-  // ====== Mi pedido: lista de jabones agregados ======
-  const [lineas, setLineas] = useState<LineaCarrito[]>([]);
+  // Lista de ítems agregados al pedido
+  const [items, setItems] = useState<ItemPedido[]>([])
 
-  // ====== Datos del cliente ======
-  const [nombre, setNombre] = useState("");
-  const [telefono, setTelefono] = useState("");
-  const [email, setEmail] = useState("");
-  const [direccion, setDireccion] = useState("");
-  const [metodoPago, setMetodoPago] = useState<MetodoPago>("Sinpe Móvil");
-  const [errores, setErrores] = useState<string[]>([]);
-  const [idPedido, setIdPedido] = useState<string | null>(null);
-  const { toast } = useToast();
+  // Datos del cliente
+  const [nombre, setNombre] = useState("")
+  const [telefono, setTelefono] = useState("")
+  const [correo, setCorreo] = useState("")
+  const [direccion, setDireccion] = useState("")
+  const [metodoPago, setMetodoPago] = useState("Sinpe Móvil")
+  const [isSending, setIsSending] = useState(false)
 
-  const completo = Boolean(piel && aceite && aroma && tamano);
-  const total = totalPedido(lineas);
+  // Aceites filtrados según tipo de piel seleccionado
+  const aceitesCompatibles = ACEITES.filter((a) => a.tiposPielIds.includes(selectedPiel))
 
-  const conError = (campo: string) => errores.includes(campo);
-  const quitarError = (campo: string) =>
-    setErrores((e) => e.filter((x) => x !== campo));
-
-  function seleccionarPiel(t: TipoPiel) {
-    setPiel(t);
-    setErrores([]);
-    // Al cambiar de piel, limpia selecciones que ya no sean compatibles
-    if (aceite && !t.aceites.includes(aceite)) setAceite(null);
-    if (aroma && !t.aromas.includes(aroma)) setAroma(null);
+  // Manejar cambio de tipo de piel (resetea aceite si el actual no es compatible)
+  const handlePielChange = (pielId: string) => {
+    setSelectedPiel(pielId)
+    const nuevosCompatibles = ACEITES.filter((a) => a.tiposPielIds.includes(pielId))
+    if (nuevosCompatibles.length > 0 && !nuevosCompatibles.some((a) => a.id === selectedAceite)) {
+      setSelectedAceite(nuevosCompatibles[0].id)
+    }
   }
 
-  /** Agrega la selección actual como una nueva línea de "Mi pedido". */
-  function agregarAlPedido() {
-    if (!completo) {
-      const faltantes: string[] = [];
-      if (!piel) faltantes.push("tipo de piel");
-      if (!aceite) faltantes.push("aceite esencial");
-      if (!aroma) faltantes.push("aroma");
-      if (!tamano) faltantes.push("tamaño");
-      toast({
-        variant: "destructive",
-        title: "Completa los 4 pasos",
-        description: `Falta elegir: ${faltantes.join(", ")}.`,
-      });
-      return;
+  // Agregar jabón al pedido
+  const handleAgregarAlPedido = () => {
+    const pielObj = TIPOS_PIEL.find((p) => p.id === selectedPiel)
+    const aceiteObj = ACEITES.find((a) => a.id === selectedAceite)
+    const aromaObj = AROMAS.find((a) => a.id === selectedAroma)
+    const tamanoObj = TAMANOS.find((t) => t.id === selectedTamano)
+
+    if (!pielObj || !aceiteObj || !aromaObj || !tamanoObj) return
+
+    const nuevoItem: ItemPedido = {
+      id: Date.now().toString(),
+      tipoPielId: pielObj.id,
+      tipoPielNombre: pielObj.nombre,
+      aceiteId: aceiteObj.id,
+      aceiteNombre: aceiteObj.nombre,
+      aromaId: aromaObj.id,
+      aromaNombre: aromaObj.nombre,
+      tamanoId: tamanoObj.id,
+      tamanoGramos: tamanoObj.gramos,
+      precioUnitario: tamanoObj.precio,
+      cantidad: cantidad,
     }
-    const nueva: LineaCarrito = {
-      id: `L${++contadorLineas}`,
-      piel,
-      aceite,
-      aroma,
-      tamano,
-      cantidad,
-    };
-    setLineas((ls) => [...ls, nueva]);
-    // Prepara el constructor para el siguiente jabón (conserva la piel,
-    // que suele repetirse entre jabones de un mismo cliente).
-    setAceite(null);
-    setAroma(null);
-    setTamano(null);
-    setCantidad(1);
-    setErrores([]);
+
+    setItems([...items, nuevoItem])
     toast({
-      title: "Jabón agregado a tu pedido \u{1f9fc}",
-      description:
-        "Puedes seguir agregando jabones con otros aromas, tamaños y aceites.",
-    });
-    document
-      .getElementById("resumen")
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      title: "¡Jabón agregado!",
+      description: `${nuevoItem.aceiteNombre} (${nuevoItem.tamanoGramos}g) se añadió a tu pedido.`,
+    })
   }
 
-  function quitarLinea(id: string) {
-    setLineas((ls) => ls.filter((l) => l.id !== id));
+  const handleEliminarItem = (id: string) => {
+    setItems(items.filter((item) => item.id !== id))
   }
 
-  function ajustarCantidadLinea(id: string, delta: number) {
-    setLineas((ls) =>
-      ls.map((l) =>
-        l.id === id
-          ? { ...l, cantidad: Math.max(1, Math.min(50, l.cantidad + delta)) }
-          : l
-      )
-    );
+  const handleCambiarCantidadItem = (id: string, delta: number) => {
+    setItems(
+      items.map((item) => {
+        if (item.id === id) {
+          const nuevaCant = Math.max(1, item.cantidad + delta)
+          return { ...item, cantidad: nuevaCant }
+        }
+        return item
+      })
+    )
   }
 
-  function reiniciar() {
-    setPiel(null);
-    setAceite(null);
-    setAroma(null);
-    setTamano(null);
-    setCantidad(1);
-    setLineas([]);
-    setNombre("");
-    setTelefono("");
-    setEmail("");
-    setDireccion("");
-    setMetodoPago("Sinpe Móvil");
-    setErrores([]);
-    setIdPedido(null);
+  const totalPedido = items.reduce((sum, item) => sum + item.precioUnitario * item.cantidad, 0)
+  const totalJabones = items.reduce((sum, item) => sum + item.cantidad, 0)
+
+  // Generación de texto para el mensaje de WhatsApp
+  const generarTextoPedido = () => {
+    const fecha = new Date().toLocaleDateString("es-CR")
+    const idPedido = `PED-${Date.now().toString().slice(-6)}`
+
+    let texto = `🍃 *NUEVO PEDIDO – By-Sil · Jabones Artesanales* 🍃\n`
+    texto += `🧾 Pedido: *${idPedido}* · ${fecha}\n`
+    texto += `------------------------------------\n\n`
+
+    items.forEach((item, index) => {
+      texto += `🧼 *Producto ${index + 1}: Jabón de ${item.aceiteNombre} (${item.tamanoGramos} g)*\n`
+      texto += `✨ *Tipo de piel:* ${item.tipoPielNombre}\n`
+      texto += `🌿 *Aceite esencial:* ${item.aceiteNombre}\n`
+      texto += `🌸 *Aroma:* ${item.aromaNombre}\n`
+      texto += `⚖️ *Tamaño:* ${item.tamanoGramos} g\n`
+      texto += `🔢 *Cantidad:* ${item.cantidad}\n`
+      texto += `💰 *Total:* ₡${(item.precioUnitario * item.cantidad).toLocaleString("es-CR")}\n\n`
+    })
+
+    texto += `------------------------------------\n`
+    texto += `👤 *Cliente:* ${nombre || "No especificado"}\n`
+    texto += `📱 *Teléfono:* ${telefono || "No especificado"}\n`
+    if (correo) texto += `📧 *Email:* ${correo}\n`
+    texto += `📍 *Dirección de envío:* ${direccion || "Por coordinar"}\n`
+    texto += `💳 *Método de pago:* ${metodoPago}\n`
+    texto += `------------------------------------\n`
+    texto += `💵 *TOTAL FINAL:* *₡${totalPedido.toLocaleString("es-CR")}* (${totalJabones} jabón${totalJabones > 1 ? "es" : ""})\n`
+
+    return { texto, idPedido }
   }
 
-  function prepararMensaje():
-    | { ok: true; mensaje: string; id: string }
-    | { ok: false; faltantes: string[] } {
-    const faltantes: string[] = [];
-    if (lineas.length === 0) faltantes.push("al menos un jabón en tu pedido");
-    if (!nombre.trim()) faltantes.push("tu nombre");
-    if (!telefono.trim()) faltantes.push("tu teléfono");
-    if (!direccion.trim()) faltantes.push("tu dirección de envío");
-    if (faltantes.length > 0) {
-      setErrores(faltantes.map((f) => f.replace("tu ", "")));
-      return { ok: false, faltantes };
-    }
-    setErrores([]);
-    const cliente: DatosCliente = {
-      nombre: nombre.trim(),
-      telefono: telefono.trim(),
-      email: email.trim(),
-      direccion: direccion.trim(),
-      metodoPago,
-    };
-    const id = idPedido ?? generarIdPedido();
-    if (!idPedido) setIdPedido(id);
-    return {
-      ok: true,
-      mensaje: construirMensajePedido(lineas, cliente, id),
-      id,
-    };
-  }
-
-  /** Registra el pedido en el panel de la administradora (respaldo automático). */
-  function registrarPedidoEnPanel(codigo: string) {
-    const cuerpo = {
-      codigo,
-      clienteNombre: nombre.trim(),
-      clienteTelefono: telefono.trim(),
-      clienteEmail: email.trim(),
-      direccion: direccion.trim(),
-      metodoPago,
-      lineas: lineas.map((l) => ({
-        tipoPiel: l.piel?.nombre ?? "",
-        aceite: l.aceite ?? "",
-        aroma: l.aroma ?? "",
-        tamanoId: l.tamano?.id ?? "",
-        cantidad: l.cantidad,
-      })),
-    };
-    fetch("/api/pedidos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(cuerpo),
-      keepalive: true,
-    }).catch(() => {
-      // Silencioso: el pedido igual llega por WhatsApp.
-    });
-  }
-
-  function enviarWhatsApp() {
-    const r = prepararMensaje();
-    if (!r.ok) {
+  const handleEnviarPedidoWhatsApp = async () => {
+    if (items.length === 0) {
       toast({
+        title: "Tu pedido está vacío",
+        description: "Agrega al menos un jabón personalizado antes de enviar.",
         variant: "destructive",
-        title: "Falta información del pedido",
-        description: `Por favor completa: ${r.faltantes.join(", ")}.`,
-      });
-      return;
+      })
+      return
     }
-    registrarPedidoEnPanel(r.id);
-    window.open(enlaceWhatsApp(whatsapp, r.mensaje), "_blank", "noopener,noreferrer");
-    toast({
-      title: "¡Tu pedido está listo en WhatsApp! \u{1f33f}",
-      description:
-        "Se abrió WhatsApp con el resumen precargado; solo presiona enviar.",
-    });
-  }
 
-  async function copiarResumen() {
-    const r = prepararMensaje();
-    if (!r.ok) {
+    if (!nombre.trim() || !telefono.trim() || !direccion.trim()) {
       toast({
+        title: "Completa los datos de envío",
+        description: "Nombre, teléfono y dirección son requeridos.",
         variant: "destructive",
-        title: "Falta información del pedido",
-        description: `Por favor completa: ${r.faltantes.join(", ")}.`,
-      });
-      return;
+      })
+      return
     }
-    try {
-      await navigator.clipboard.writeText(r.mensaje);
-    } catch {
-      const ta = document.createElement("textarea");
-      ta.value = r.mensaje;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      ta.remove();
+
+    setIsSending(true)
+    const { texto, idPedido } = generarTextoPedido()
+
+    // 1. Enviar correo de confirmación al cliente vía API si ingresó email
+    if (correo) {
+      try {
+        await fetch("/api/pedidos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            idPedido,
+            nombre,
+            telefono,
+            correo,
+            direccion,
+            metodoPago,
+            items,
+            totalPedido,
+          }),
+        })
+      } catch (error) {
+        console.error("Error al enviar copia de correo:", error)
+      }
     }
+
+    // 2. Abrir WhatsApp con el pedido precargado
+    const numeroWA = "50688419135"
+    const url = `https://wa.me/${numeroWA}?text=${encodeURIComponent(texto)}`
+    window.open(url, "_blank")
+    setIsSending(false)
+
     toast({
-      title: "Resumen copiado al portapapeles",
-      description: "Pégalo en WhatsApp o donde lo necesites.",
-    });
+      title: "¡Pedido procesado!",
+      description: correo ? "Te enviamos una copia a tu correo electrónico." : "Se ha abierto WhatsApp con tu pedido.",
+    })
   }
 
-  const pasosResumen = [
-    { n: 1, label: "Tipo de piel", valor: piel?.nombre },
-    { n: 2, label: "Aceite esencial", valor: aceite },
-    { n: 3, label: "Aroma", valor: aroma },
-    {
-      n: 4,
-      label: "Tamaño y cantidad",
-      valor: tamano ? `${tamano.gramos} g × ${cantidad}` : null,
-    },
-  ];
+  const handleCopiarResumen = () => {
+    if (items.length === 0) return
+    const { texto } = generarTextoPedido()
+    navigator.clipboard.writeText(texto)
+    toast({
+      title: "Resumen copiado",
+      description: "Copiado al portapapeles con éxito.",
+    })
+  }
+
+  const handleReiniciar = () => {
+    setItems([])
+    setNombre("")
+    setTelefono("")
+    setCorreo("")
+    setDireccion("")
+    toast({ description: "Se ha reiniciado el configurador." })
+  }
 
   return (
-    <section id="configurar" className="scroll-mt-20 py-16 sm:py-24">
-      <div className="mx-auto max-w-6xl px-4 sm:px-6">
-        <div className="mx-auto mb-12 max-w-2xl text-center">
-          <p className="mb-3 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-salvia">
-            <Sparkles className="h-4 w-4" aria-hidden />
-            Configurador
-          </p>
-          <h2 className="font-display text-3xl font-semibold tracking-tight text-primary sm:text-4xl lg:text-5xl">
+    <section id="configurador" className="py-12 bg-[#fdfbf7]">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        
+        {/* Encabezado del Configurador */}
+        <div className="text-center max-w-3xl mx-auto mb-10">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#eae3d2] text-[#2d4a3e] text-xs font-semibold tracking-wider uppercase mb-3">
+            <Sparkles className="h-3.5 w-3.5" />
+            <span>Configurador</span>
+          </div>
+          <h2 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold text-[#2d4a3e] mb-4">
             Crea tus jabones a tu medida
           </h2>
-          <p className="mt-4 text-muted-foreground">
-            Cuatro pasos sencillos por cada jabón: elige tu tipo de piel,
-            descubre los aceites y aromas compatibles, selecciona el tamaño y
-            agrégalos a tu pedido. Combina cuantos jabones quieras y envía todo
-            junto por WhatsApp.
+          <p className="text-base sm:text-lg text-[#5a6b5c] leading-relaxed">
+            Cuatro pasos sencillos por cada jabón: elige tu tipo de piel, descubre los aceites compatibles, selecciona el aroma de tu preferencia, el tamaño y agrégalos a tu pedido. Combina cuantos jabones quieras y envíanos tu pedido.
           </p>
         </div>
 
-        <div className="grid items-start gap-10 lg:grid-cols-[1fr_400px]">
-          {/* ============ PASOS ============ */}
-          <div className="space-y-10">
-            {/* Paso 1: tipo de piel */}
-            <article aria-labelledby="paso-1">
-              <PasoEncabezado
-                numero={1}
-                id="paso-1"
-                titulo="¿Cuál es tu tipo de piel?"
-                descripcion="Define qué aceites y aromas te convienen."
-              />
-              <div className="grid gap-3 sm:grid-cols-2">
-                {TIPOS_PIEL.map((t) => {
-                  const activo = piel?.id === t.id;
-                  return (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => seleccionarPiel(t)}
-                      aria-pressed={activo}
-                      className={cn(
-                        "group relative w-full rounded-2xl border-2 bg-card p-4 text-left transition-all sm:p-5",
-                        activo
-                          ? "shadow-md"
-                          : "border-border hover:-translate-y-0.5 hover:shadow-sm"
-                      )}
-                      style={
-                        activo
-                          ? {
-                              borderColor: t.color,
-                              backgroundColor: `${t.color}12`,
-                            }
-                          : undefined
-                      }
-                    >
-                      <span className="flex items-center justify-between gap-2">
-                        <span className="flex items-center gap-2.5">
-                          <span
-                            className="h-3 w-3 rounded-full"
-                            style={{ backgroundColor: t.color }}
-                            aria-hidden
-                          />
-                          <span className="font-semibold text-foreground">
-                            {t.nombre}
-                          </span>
-                        </span>
-                        {activo && (
-                          <Check
-                            className="h-5 w-5 shrink-0"
-                            style={{ color: t.color }}
-                            aria-hidden
-                          />
-                        )}
-                      </span>
-                      <span className="mt-1.5 block text-sm leading-relaxed text-muted-foreground">
-                        {t.descripcion}
-                      </span>
-                    </button>
-                  );
-                })}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          
+          {/* PASOS DEL CONFIGURADOR (Izquierda) */}
+          <div className="lg:col-span-7 space-y-8">
+            
+            {/* PASO 1: Tipo de piel */}
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#e5ded0]">
+              <div className="flex items-center gap-3 mb-4">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#2d4a3e] text-white font-serif font-bold text-sm">
+                  1
+                </span>
+                <div>
+                  <h3 className="font-serif text-xl font-bold text-[#2d4a3e]">
+                    ¿Cuál es tu tipo de piel?
+                  </h3>
+                  <p className="text-xs text-[#6b7c6d]">
+                    Define qué aceites y propiedades te convienen.
+                  </p>
+                </div>
               </div>
-            </article>
 
-            {/* Paso 2: aceite esencial */}
-            <article aria-labelledby="paso-2">
-              <PasoEncabezado
-                numero={2}
-                id="paso-2"
-                titulo="Elige tu aceite esencial"
-                descripcion={
-                  piel
-                    ? `Opciones compatibles con ${piel.nombre.toLowerCase()}.`
-                    : "Se activa al elegir tu tipo de piel."
-                }
-                atenuado={!piel}
-              />
-              {piel ? (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {piel.aceites.map((nombreAceite) => {
-                    const activo = aceite === nombreAceite;
-                    return (
-                      <button
-                        key={nombreAceite}
-                        type="button"
-                        onClick={() => {
-                          setAceite(nombreAceite);
-                          setErrores([]);
-                        }}
-                        aria-pressed={activo}
-                        className={cn(
-                          "w-full rounded-2xl border-2 bg-card p-4 text-left transition-all sm:p-5",
-                          activo
-                            ? "border-primary bg-secondary/60 shadow-md"
-                            : "border-border hover:-translate-y-0.5 hover:border-salvia/60 hover:shadow-sm"
-                        )}
-                      >
-                        <span className="flex items-center justify-between gap-2">
-                          <span className="flex items-center gap-2.5">
-                            <span
-                              className={cn(
-                                "flex h-8 w-8 items-center justify-center rounded-lg",
-                                activo
-                                  ? "bg-primary text-primary-foreground"
-                                  : "bg-secondary text-salvia"
-                              )}
-                            >
-                              <Leaf className="h-4 w-4" aria-hidden />
-                            </span>
-                            <span className="font-semibold text-foreground">
-                              {nombreAceite}
-                            </span>
-                          </span>
-                          {activo && (
-                            <Check className="h-5 w-5 text-primary" aria-hidden />
-                          )}
-                        </span>
-                        <span className="mt-2 block text-xs leading-relaxed text-muted-foreground sm:text-sm">
-                          {propiedadesDe(nombreAceite)}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <MarcadorPendiente texto="Primero selecciona tu tipo de piel para ver los aceites compatibles." />
-              )}
-            </article>
-
-            {/* Paso 3: aroma */}
-            <article aria-labelledby="paso-3">
-              <PasoEncabezado
-                numero={3}
-                id="paso-3"
-                titulo="Escoge tu aroma favorito"
-                descripcion={
-                  piel
-                    ? "Fragancias recomendadas para tu tipo de piel."
-                    : "Se activa al elegir tu tipo de piel."
-                }
-                atenuado={!piel}
-              />
-              {piel ? (
-                <div className="flex flex-wrap gap-2.5" role="group" aria-label="Aromas disponibles">
-                  {/* Sorpréndeme: la administradora elige el aroma al preparar el pedido */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAroma(SORPRENDEME);
-                      setErrores([]);
-                    }}
-                    aria-pressed={aroma === SORPRENDEME}
-                    className={cn(
-                      "inline-flex items-center gap-2 rounded-full border-2 border-dashed px-4 py-2.5 text-sm font-medium transition-all",
-                      aroma === SORPRENDEME
-                        ? "border-primary bg-primary text-primary-foreground shadow-md"
-                        : "border-salvia/50 bg-card text-salvia hover:bg-secondary"
-                    )}
-                  >
-                    <Sparkles className="h-4 w-4" aria-hidden />
-                    Sorpréndeme
-                    {aroma === SORPRENDEME && <Check className="h-4 w-4" aria-hidden />}
-                  </button>
-                  {piel.aromas.map((nombreAroma) => {
-                    const activo = aroma === nombreAroma;
-                    return (
-                      <button
-                        key={nombreAroma}
-                        type="button"
-                        onClick={() => {
-                          setAroma(nombreAroma);
-                          setErrores([]);
-                        }}
-                        aria-pressed={activo}
-                        className={cn(
-                          "inline-flex items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-medium transition-all",
-                          activo
-                            ? "border-primary bg-primary text-primary-foreground shadow-md"
-                            : "border-border bg-card text-foreground/85 hover:border-salvia/60 hover:bg-secondary"
-                        )}
-                      >
-                        <Flower2 className="h-4 w-4" aria-hidden />
-                        {nombreAroma}
-                        {activo && <Check className="h-4 w-4" aria-hidden />}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <MarcadorPendiente texto="Primero selecciona tu tipo de piel para ver los aromas compatibles." />
-              )}
-            </article>
-
-            {/* Paso 4: tamaño y cantidad */}
-            <article aria-labelledby="paso-4">
-              <PasoEncabezado
-                numero={4}
-                id="paso-4"
-                titulo="Tamaño y cantidad"
-                descripcion="Precios según el peso del jabón."
-              />
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                {TAMANOS.map((t) => {
-                  const activo = tamano?.id === t.id;
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {TIPOS_PIEL.map((piel) => {
+                  const isSelected = selectedPiel === piel.id
                   return (
                     <button
-                      key={t.id}
+                      key={piel.id}
                       type="button"
-                      onClick={() => {
-                        setTamano(t);
-                        setErrores([]);
-                      }}
-                      aria-pressed={activo}
-                      className={cn(
-                        "relative w-full rounded-2xl border-2 bg-card p-4 text-center transition-all",
-                        activo
-                          ? "border-primary bg-secondary/60 shadow-md"
-                          : "border-border hover:-translate-y-0.5 hover:border-salvia/60 hover:shadow-sm"
-                      )}
+                      onClick={() => handlePielChange(piel.id)}
+                      className={`text-left p-4 rounded-xl border transition-all ${
+                        isSelected
+                          ? "border-[#2d4a3e] bg-[#f4f1ea] shadow-sm"
+                          : "border-[#e5ded0] bg-white hover:border-[#b8a898]"
+                      }`}
                     >
-                      {t.popular && (
-                        <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-full bg-primary px-2.5 py-0.5 text-[10px] font-semibold tracking-wide text-primary-foreground uppercase">
-                          Más pedido
-                        </span>
-                      )}
-                      <span className="font-display text-3xl font-semibold text-primary">
-                        {t.gramos}
-                        <span className="text-base"> g</span>
-                      </span>
-                      <span className="mt-0.5 block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        {t.etiqueta}
-                      </span>
-                      <span className="mt-2 block font-semibold text-foreground">
-                        {formatoCRC(t.precio)}
-                      </span>
-                      <span className="mt-1 block text-xs leading-snug text-muted-foreground">
-                        {t.descripcion}
-                      </span>
-                      {activo && (
-                        <Check
-                          className="mx-auto mt-2 h-4 w-4 text-primary"
-                          aria-hidden
+                      <div className="flex items-center gap-2 mb-1">
+                        <span
+                          className="h-2.5 w-2.5 rounded-full"
+                          style={{ backgroundColor: piel.colorHex }}
                         />
-                      )}
+                        <span className="font-semibold text-sm text-[#2d4a3e]">
+                          {piel.nombre}
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#6b7c6d] leading-relaxed">
+                        {piel.descripcion}
+                      </p>
                     </button>
-                  );
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* PASO 2: Aceite esencial */}
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#e5ded0]">
+              <div className="flex items-center gap-3 mb-4">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#2d4a3e] text-white font-serif font-bold text-sm">
+                  2
+                </span>
+                <div>
+                  <h3 className="font-serif text-xl font-bold text-[#2d4a3e]">
+                    Selecciona tu aceite esencial
+                  </h3>
+                  <p className="text-xs text-[#6b7c6d]">
+                    Aceites beneficiosos recomendados para tu tipo de piel.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {aceitesCompatibles.map((aceite) => {
+                  const isSelected = selectedAceite === aceite.id
+                  return (
+                    <button
+                      key={aceite.id}
+                      type="button"
+                      onClick={() => setSelectedAceite(aceite.id)}
+                      className={`text-left p-4 rounded-xl border transition-all ${
+                        isSelected
+                          ? "border-[#2d4a3e] bg-[#f4f1ea] shadow-sm"
+                          : "border-[#e5ded0] bg-white hover:border-[#b8a898]"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-semibold text-sm text-[#2d4a3e]">
+                          {aceite.nombre}
+                        </span>
+                        {isSelected && <Check className="h-4 w-4 text-[#2d4a3e]" />}
+                      </div>
+                      <p className="text-xs text-[#6b7c6d] line-clamp-2">
+                        {aceite.propiedades}
+                      </p>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* PASO 3: Aroma (18 aromas independientes) */}
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#e5ded0]">
+              <div className="flex items-center gap-3 mb-4">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#2d4a3e] text-white font-serif font-bold text-sm">
+                  3
+                </span>
+                <div>
+                  <h3 className="font-serif text-xl font-bold text-[#2d4a3e]">
+                    Escoge tu aroma favorito
+                  </h3>
+                  <p className="text-xs text-[#6b7c6d]">
+                    Cualquiera de nuestras fragancias de catálogo.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {AROMAS.map((aroma) => {
+                  const isSelected = selectedAroma === aroma.id
+                  return (
+                    <button
+                      key={aroma.id}
+                      type="button"
+                      onClick={() => setSelectedAroma(aroma.id)}
+                      className={`px-3.5 py-2 rounded-full text-xs font-medium border transition-all ${
+                        isSelected
+                          ? "bg-[#2d4a3e] text-white border-[#2d4a3e] shadow-xs"
+                          : "bg-[#fdfbf7] text-[#4a5d4e] border-[#e5ded0] hover:border-[#2d4a3e]"
+                      }`}
+                    >
+                      🌸 {aroma.nombre}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* PASO 4: Tamaño y cantidad */}
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#e5ded0]">
+              <div className="flex items-center gap-3 mb-4">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#2d4a3e] text-white font-serif font-bold text-sm">
+                  4
+                </span>
+                <div>
+                  <h3 className="font-serif text-xl font-bold text-[#2d4a3e]">
+                    Tamaño y cantidad
+                  </h3>
+                  <p className="text-xs text-[#6b7c6d]">
+                    Precios según el peso del jabón.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                {TAMANOS.map((tamano) => {
+                  const isSelected = selectedTamano === tamano.id
+                  return (
+                    <button
+                      key={tamano.id}
+                      type="button"
+                      onClick={() => setSelectedTamano(tamano.id)}
+                      className={`p-3 rounded-xl border text-center transition-all ${
+                        isSelected
+                          ? "border-[#2d4a3e] bg-[#f4f1ea] shadow-sm"
+                          : "border-[#e5ded0] bg-white hover:border-[#b8a898]"
+                      }`}
+                    >
+                      <span className="block font-serif text-lg font-bold text-[#2d4a3e]">
+                        {tamano.gramos} g
+                      </span>
+                      <span className="block text-[10px] font-semibold tracking-wider text-[#8c7a6b] uppercase mb-1">
+                        {tamano.etiqueta}
+                      </span>
+                      <span className="block font-bold text-sm text-[#2d4a3e]">
+                        ₡{tamano.precio.toLocaleString("es-CR")}
+                      </span>
+                    </button>
+                  )
                 })}
               </div>
 
-              <div className="mt-5 flex flex-wrap items-center gap-4 rounded-2xl border border-border bg-card p-4">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <Scale className="h-4 w-4 text-salvia" aria-hidden />
-                  Cantidad
+              <div className="flex items-center justify-between pt-4 border-t border-[#f0eae0]">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-semibold text-[#2d4a3e]">Cantidad:</span>
+                  <div className="flex items-center rounded-lg border border-[#e5ded0] bg-[#fdfbf7]">
+                    <button
+                      type="button"
+                      onClick={() => setCantidad(Math.max(1, cantidad - 1))}
+                      className="px-3 py-1.5 text-sm font-bold text-[#2d4a3e] hover:bg-[#eae3d2]"
+                    >
+                      -
+                    </button>
+                    <span className="px-3 text-sm font-bold text-[#2d4a3e]">{cantidad}</span>
+                    <button
+                      type="button"
+                      onClick={() => setCantidad(cantidad + 1)}
+                      className="px-3 py-1.5 text-sm font-bold text-[#2d4a3e] hover:bg-[#eae3d2]"
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1 rounded-full border border-input bg-background p-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 rounded-full"
-                    onClick={() => setCantidad((c) => Math.max(1, c - 1))}
-                    disabled={cantidad <= 1}
-                    aria-label="Disminuir cantidad"
-                  >
-                    <Minus className="h-4 w-4" aria-hidden />
-                  </Button>
-                  <span
-                    className="w-10 text-center text-base font-semibold tabular-nums"
-                    aria-live="polite"
-                  >
-                    {cantidad}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 rounded-full"
-                    onClick={() => setCantidad((c) => Math.min(50, c + 1))}
-                    aria-label="Aumentar cantidad"
-                  >
-                    <Plus className="h-4 w-4" aria-hidden />
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Al terminar, agrega este jabón a tu pedido; puedes combinar
-                  varios distintos.
-                </p>
-              </div>
 
-              <Button
-                type="button"
-                size="lg"
-                className="mt-5 w-full rounded-full text-base sm:w-auto sm:px-8"
-                onClick={agregarAlPedido}
-              >
-                <ShoppingBag className="h-5 w-5" aria-hidden />
-                Agregar al pedido
-              </Button>
-            </article>
+                <Button
+                  type="button"
+                  onClick={handleAgregarAlPedido}
+                  className="bg-[#2d4a3e] hover:bg-[#1e3329] text-white rounded-full px-6 py-2.5 font-medium shadow-sm"
+                >
+                  <ShoppingBag className="h-4 w-4 mr-2" />
+                  Agregar al pedido
+                </Button>
+              </div>
+            </div>
+
           </div>
 
-          {/* ============ MI PEDIDO ============ */}
-          <aside
-            id="resumen"
-            className="scroll-mt-24 lg:sticky lg:top-24"
-            aria-label="Mi pedido"
-          >
-            <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-lg">
-              <div className="flex items-center gap-4 border-b border-border bg-secondary/50 p-5">
-                <Image
-                  src="/images/jabon-artesanal.png"
-                  alt="Jabón artesanal envuelto en papel kraft con lavanda"
-                  width={200}
-                  height={200}
-                  className="h-20 w-20 rounded-2xl border border-border object-cover"
-                />
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-salvia">
-                    Mi pedido
-                  </p>
-                  {lineas.length === 0 ? (
-                    <p className="font-display truncate text-xl font-semibold text-primary">
-                      Aún no agregas jabones
-                    </p>
-                  ) : (
-                    <p className="font-display text-xl font-semibold text-primary">
-                      {unidadesPedido(lineas)}{" "}
-                      {unidadesPedido(lineas) === 1 ? "jabón" : "jabones"} ·{" "}
-                      {lineas.length}{" "}
-                      {lineas.length === 1 ? "variedad" : "variedades"}
-                    </p>
-                  )}
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {lineas.length === 0
-                      ? "Configura tu primer jabón en los 4 pasos"
-                      : "Puedes seguir agregando más jabones"}
-                  </p>
-                </div>
-              </div>
+          {/* RESUMEN DE PEDIDO Y DATOS DE ENVÍO (Derecha) */}
+          <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-24">
+            
+            <div className="bg-white rounded-2xl p-6 shadow-md border border-[#e5ded0]">
+              <h3 className="font-serif text-2xl font-bold text-[#2d4a3e] mb-1">
+                Mi Pedido
+              </h3>
+              <p className="text-xs text-[#6b7c6d] mb-4">
+                {items.length === 0
+                  ? "Aún no has agregado jabones."
+                  : `${totalJabones} jabón${totalJabones > 1 ? "es" : ""} seleccionado${totalJabones > 1 ? "s" : ""}.`}
+              </p>
 
-              <div className="p-5 sm:p-6">
-                {/* Selección en curso */}
-                <ul className="space-y-2.5">
-                  {pasosResumen.map((p) => (
-                    <li key={p.n} className="flex items-center gap-3 text-sm">
-                      <span
-                        className={cn(
-                          "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
-                          p.valor
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground"
-                        )}
-                      >
-                        {p.valor ? <Check className="h-3.5 w-3.5" aria-hidden /> : p.n}
-                      </span>
-                      <span className="text-muted-foreground">{p.label}:</span>
-                      <span
-                        className={cn(
-                          "ml-auto truncate font-medium",
-                          p.valor ? "text-foreground" : "text-muted-foreground/60"
-                        )}
-                      >
-                        {p.valor ?? "Por elegir"}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-
-                {/* Líneas agregadas */}
-                <div className="mt-5">
-                  {lineas.length === 0 ? (
-                    <div className="flex items-center gap-3 rounded-2xl border-2 border-dashed border-border bg-muted/40 p-4 text-sm text-muted-foreground">
-                      <PackageOpen className="h-5 w-5 shrink-0 text-salvia" aria-hidden />
-                      Tu pedido está vacío: agrega el primer jabón con el botón
-                      «Agregar al pedido».
-                    </div>
-                  ) : (
-                    <ul className="space-y-2.5" aria-label="Jabones agregados al pedido">
-                      {lineas.map((l, i) => (
-                        <li
-                          key={l.id}
-                          className="rounded-2xl border border-border bg-background p-3"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="min-w-0 text-sm font-semibold text-foreground">
-                              <span className="mr-1.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-secondary text-[11px] font-bold text-salvia">
-                                {i + 1}
-                              </span>
-                              {nombreProducto(l)}
-                            </p>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 shrink-0 rounded-full text-muted-foreground hover:text-destructive"
-                              onClick={() => quitarLinea(l.id)}
-                              aria-label={`Quitar ${nombreProducto(l)} del pedido`}
-                            >
-                              <Trash2 className="h-4 w-4" aria-hidden />
-                            </Button>
-                          </div>
-                          <p className="mt-1 truncate pl-7 text-xs text-muted-foreground">
-                            {l.aroma === SORPRENDEME
-                              ? "Aroma a elección de By-Sil"
-                              : `Aroma ${l.aroma}`}
-                            {l.piel ? ` · Piel ${l.piel.nombre}` : ""}
-                          </p>
-                          <div className="mt-2 flex items-center justify-between gap-2 pl-1">
-                            <div className="flex items-center gap-1 rounded-full border border-input bg-card p-0.5">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 rounded-full"
-                                onClick={() => ajustarCantidadLinea(l.id, -1)}
-                                disabled={l.cantidad <= 1}
-                                aria-label="Disminuir cantidad de esta línea"
-                              >
-                                <Minus className="h-3.5 w-3.5" aria-hidden />
-                              </Button>
-                              <span className="w-7 text-center text-sm font-semibold tabular-nums">
-                                ×{l.cantidad}
-                              </span>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 rounded-full"
-                                onClick={() => ajustarCantidadLinea(l.id, 1)}
-                                aria-label="Aumentar cantidad de esta línea"
-                              >
-                                <Plus className="h-3.5 w-3.5" aria-hidden />
-                              </Button>
-                            </div>
-                            <p className="text-sm font-semibold text-primary">
-                              {formatoCRC(subtotalLinea(l))}
-                            </p>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-
-                <div className="mt-5 rounded-2xl bg-primary p-4 text-primary-foreground">
-                  <div className="flex items-end justify-between gap-2">
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wider opacity-80">
-                        Total
-                      </p>
-                      {lineas.length > 0 && (
-                        <p className="text-xs opacity-80">
-                          {unidadesPedido(lineas)}{" "}
-                          {unidadesPedido(lineas) === 1 ? "jabón" : "jabones"}
-                        </p>
-                      )}
-                    </div>
-                    <p className="font-display text-4xl font-semibold leading-none">
-                      {formatoCRC(total)}
-                    </p>
-                  </div>
-                </div>
-
-                <Separator className="my-6" />
-
-                <h3 className="font-display mb-4 text-xl font-semibold text-foreground">
-                  Tus datos de envío
-                </h3>
-                <div className="space-y-4">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="nombre">Nombre completo *</Label>
-                    <Input
-                      id="nombre"
-                      placeholder="Ej. María Rodríguez"
-                      value={nombre}
-                      onChange={(e) => {
-                        setNombre(e.target.value);
-                        quitarError("nombre");
-                      }}
-                      className={cn(conError("nombre") && "border-destructive focus-visible:ring-destructive/40")}
-                    />
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="telefono">Teléfono / WhatsApp *</Label>
-                      <Input
-                        id="telefono"
-                        type="tel"
-                        inputMode="tel"
-                        placeholder="8888-8888"
-                        value={telefono}
-                        onChange={(e) => {
-                          setTelefono(e.target.value);
-                          quitarError("teléfono");
-                        }}
-                        className={cn(conError("teléfono") && "border-destructive focus-visible:ring-destructive/40")}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="email">
-                        Correo{" "}
-                        <span className="text-muted-foreground">(opcional)</span>
-                      </Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        placeholder="tucorreo@ejemplo.com"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="direccion">Dirección exacta de envío *</Label>
-                    <Textarea
-                      id="direccion"
-                      placeholder="Provincia, cantón, distrito, señas exactas"
-                      rows={2}
-                      value={direccion}
-                      onChange={(e) => {
-                        setDireccion(e.target.value);
-                        quitarError("dirección");
-                      }}
-                      className={cn(conError("dirección") && "border-destructive focus-visible:ring-destructive/40")}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Método de pago *</Label>
-                    <RadioGroup
-                      value={metodoPago}
-                      onValueChange={(v) => setMetodoPago(v as MetodoPago)}
-                      className="grid gap-2 sm:grid-cols-3"
+              {/* Lista de jabones agregados */}
+              {items.length > 0 ? (
+                <div className="space-y-3 mb-6 max-h-72 overflow-y-auto pr-1">
+                  {items.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between p-3 rounded-xl bg-[#fdfbf7] border border-[#e5ded0]"
                     >
-                      {METODOS_PAGO.map((m) => (
-                        <Label
-                          key={m}
-                          htmlFor={`pago-${m}`}
-                          className={cn(
-                            "flex cursor-pointer items-center gap-2 rounded-xl border p-3 text-sm font-normal transition-colors",
-                            metodoPago === m
-                              ? "border-primary bg-secondary/60 font-medium"
-                              : "hover:bg-muted/60"
-                          )}
+                      <div className="space-y-0.5">
+                        <span className="font-semibold text-sm text-[#2d4a3e] block">
+                          Jabón de {item.aceiteNombre} ({item.tamanoGramos}g)
+                        </span>
+                        <span className="text-xs text-[#6b7c6d] block">
+                          Aroma: {item.aromaNombre}
+                        </span>
+                        <span className="text-xs font-bold text-[#2d4a3e] block">
+                          ₡{(item.precioUnitario * item.cantidad).toLocaleString("es-CR")}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center rounded-md border border-[#e5ded0] bg-white">
+                          <button
+                            type="button"
+                            onClick={() => handleCambiarCantidadItem(item.id, -1)}
+                            className="px-2 py-0.5 text-xs font-bold text-[#2d4a3e]"
+                          >
+                            -
+                          </button>
+                          <span className="px-1.5 text-xs font-bold">{item.cantidad}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleCambiarCantidadItem(item.id, 1)}
+                            className="px-2 py-0.5 text-xs font-bold text-[#2d4a3e]"
+                          >
+                            +
+                          </button>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleEliminarItem(item.id)}
+                          className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                         >
-                          <RadioGroupItem value={m} id={`pago-${m}`} />
-                          {m}
-                        </Label>
-                      ))}
-                    </RadioGroup>
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="pt-3 border-t border-[#e5ded0] flex items-center justify-between">
+                    <span className="font-serif text-lg font-bold text-[#2d4a3e]">TOTAL</span>
+                    <span className="font-serif text-xl font-bold text-[#2d4a3e]">
+                      ₡{totalPedido.toLocaleString("es-CR")}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-8 text-center border-2 border-dashed border-[#e5ded0] rounded-xl mb-6">
+                  <p className="text-sm text-[#8c7a6b]">
+                    Configura tu primer jabón a la izquierda y presiona "Agregar al pedido".
+                  </p>
+                </div>
+              )}
+
+              {/* Formulario Datos de Envío */}
+              <div className="space-y-4 pt-4 border-t border-[#e5ded0]">
+                <h4 className="font-serif text-lg font-bold text-[#2d4a3e]">
+                  Tus datos de envío
+                </h4>
+
+                <div>
+                  <Label htmlFor="nombre" className="text-xs font-semibold text-[#2d4a3e]">
+                    Nombre completo *
+                  </Label>
+                  <Input
+                    id="nombre"
+                    value={nombre}
+                    onChange={(e) => setNombre(e.target.value)}
+                    placeholder="Ej. María Rodríguez"
+                    className="mt-1 bg-[#fdfbf7] border-[#e5ded0]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="telefono" className="text-xs font-semibold text-[#2d4a3e]">
+                      Teléfono / WhatsApp *
+                    </Label>
+                    <Input
+                      id="telefono"
+                      value={telefono}
+                      onChange={(e) => setTelefono(e.target.value)}
+                      placeholder="8888-8888"
+                      className="mt-1 bg-[#fdfbf7] border-[#e5ded0]"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="correo" className="text-xs font-semibold text-[#2d4a3e]">
+                      Correo (opcional)
+                    </Label>
+                    <Input
+                      id="correo"
+                      type="email"
+                      value={correo}
+                      onChange={(e) => setCorreo(e.target.value)}
+                      placeholder="tucorreo@ejemplo.com"
+                      className="mt-1 bg-[#fdfbf7] border-[#e5ded0]"
+                    />
                   </div>
                 </div>
 
-                <div className="mt-6 space-y-2.5">
+                <div>
+                  <Label htmlFor="direccion" className="text-xs font-semibold text-[#2d4a3e]">
+                    Dirección exacta de envío *
+                  </Label>
+                  <Textarea
+                    id="direccion"
+                    value={direccion}
+                    onChange={(e) => setDireccion(e.target.value)}
+                    placeholder="Provincia, cantón, distrito, señas exactas"
+                    className="mt-1 bg-[#fdfbf7] border-[#e5ded0] h-20 text-xs"
+                  />
+                </div>
+
+                <div>
+                  <Label className="text-xs font-semibold text-[#2d4a3e] mb-2 block">
+                    Método de pago *
+                  </Label>
+                  <RadioGroup
+                    value={metodoPago}
+                    onValueChange={setMetodoPago}
+                    className="grid grid-cols-3 gap-2"
+                  >
+                    {["Sinpe Móvil", "Efectivo", "Tarjeta"].map((metodo) => (
+                      <div key={metodo} className="flex items-center space-x-2 border border-[#e5ded0] p-2 rounded-lg bg-[#fdfbf7]">
+                        <RadioGroupItem value={metodo} id={metodo} />
+                        <Label htmlFor={metodo} className="text-xs cursor-pointer text-[#2d4a3e]">
+                          {metodo}
+                        </Label>
+                      </div>
+                    ))}
+                  </RadioGroup>
+                </div>
+
+                {/* Acciones de envío */}
+                <div className="space-y-2 pt-2">
                   <Button
                     type="button"
-                    size="lg"
-                    className="w-full rounded-full text-base"
-                    onClick={enviarWhatsApp}
+                    disabled={isSending}
+                    onClick={handleEnviarPedidoWhatsApp}
+                    className="w-full bg-[#2d4a3e] hover:bg-[#1e3329] text-white font-medium py-3 rounded-full shadow-sm text-sm"
                   >
-                    <MessageCircle className="h-5 w-5" aria-hidden />
+                    <Send className="h-4 w-4 mr-2" />
                     Enviar pedido por WhatsApp
                   </Button>
-                  <Button
-                    type="button"
-                    size="lg"
-                    variant="outline"
-                    className="w-full rounded-full"
-                    onClick={copiarResumen}
-                  >
-                    <Copy className="h-4 w-4" aria-hidden />
-                    Copiar resumen del pedido
-                  </Button>
-                  <div className="flex items-center justify-between pt-1">
-                    <p className="text-xs leading-snug text-muted-foreground">
-                      Al enviar se abre WhatsApp con tu pedido completo
-                      precargado. Confirmamos disponibilidad, pago y entrega.
-                    </p>
+
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleCopiarResumen}
+                      className="flex-1 border-[#e5ded0] text-[#2d4a3e] hover:bg-[#f4f1ea] rounded-full text-xs"
+                    >
+                      <Copy className="h-3.5 w-3.5 mr-1" />
+                      Copiar resumen
+                    </Button>
                     <Button
                       type="button"
                       variant="ghost"
-                      size="sm"
-                      className="h-8 shrink-0 gap-1.5 rounded-full text-xs text-muted-foreground"
-                      onClick={reiniciar}
+                      onClick={handleReiniciar}
+                      className="text-[#8c7a6b] hover:bg-[#f4f1ea] rounded-full text-xs"
                     >
-                      <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+                      <RotateCcw className="h-3.5 w-3.5 mr-1" />
                       Reiniciar
                     </Button>
                   </div>
-                  {idPedido && (
-                    <p className="text-center text-xs text-muted-foreground">
-                      N.º de pedido:{" "}
-                      <span className="font-mono font-medium text-foreground">
-                        {idPedido}
-                      </span>
-                    </p>
-                  )}
                 </div>
+
               </div>
             </div>
-          </aside>
-        </div>
-      </div>
 
-      {/* Barra móvil fija con el total */}
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 backdrop-blur lg:hidden">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
-          <div>
-            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              Total estimado · {unidadesPedido(lineas)}{" "}
-              {unidadesPedido(lineas) === 1 ? "jabón" : "jabones"}
-            </p>
-            <p className="font-display text-2xl font-semibold leading-none text-primary">
-              {formatoCRC(total)}
-            </p>
           </div>
-          <Button
-            type="button"
-            className="rounded-full"
-            onClick={() =>
-              document
-                .getElementById("resumen")
-                ?.scrollIntoView({ behavior: "smooth", block: "start" })
-            }
-          >
-            <ShoppingBag className="h-4 w-4" aria-hidden />
-            Ver mi pedido
-          </Button>
+
         </div>
       </div>
     </section>
-  );
-}
-
-function PasoEncabezado({
-  numero,
-  id,
-  titulo,
-  descripcion,
-  atenuado = false,
-}: {
-  numero: number;
-  id: string;
-  titulo: string;
-  descripcion: string;
-  atenuado?: boolean;
-}) {
-  return (
-    <div className="mb-4 flex items-start gap-3.5">
-      <span
-        className={cn(
-          "font-display flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg font-semibold",
-          atenuado ? "bg-muted text-muted-foreground" : "bg-primary text-primary-foreground"
-        )}
-        aria-hidden
-      >
-        {numero}
-      </span>
-      <div>
-        <h3
-          id={id}
-          className={cn(
-            "font-display text-2xl font-semibold tracking-tight",
-            atenuado ? "text-muted-foreground" : "text-foreground"
-          )}
-        >
-          {titulo}
-        </h3>
-        <p className="text-sm text-muted-foreground">{descripcion}</p>
-      </div>
-    </div>
-  );
-}
-
-function MarcadorPendiente({ texto }: { texto: string }) {
-  return (
-    <div className="flex items-center gap-3 rounded-2xl border-2 border-dashed border-border bg-muted/40 p-5 text-sm text-muted-foreground">
-      <MousePointerClick className="h-5 w-5 shrink-0 text-salvia" aria-hidden />
-      {texto}
-    </div>
-  );
+  )
 }
