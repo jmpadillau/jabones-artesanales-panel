@@ -1,0 +1,90 @@
+// Esquema de la base de datos (SQLite en desarrollo local).
+// `bun run db:push` crea/actualiza las tablas a partir de este archivo.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Pedido creado desde el configurador de la web (o registrado a mano).
+// Un pedido con varios jabones (distinto aroma/tamaño/aceite) se guarda como
+// VARIAS FILAS con el MISMO código (una fila por línea del pedido); el panel
+// las agrupa por código para mostrarlas como un solo pedido.
+model Pedido {
+  id              String    @id @default(cuid())
+  codigo          String    @default("") // PED-... (compartido por todas las líneas)
+  lineaNum        Int       @default(1) // 1, 2, 3… posición de la línea dentro del pedido
+  estado          String    @default("Pendiente") // Pendiente | Realizado | Entregado | Cancelado
+
+  clienteNombre   String
+  clienteTelefono String
+  clienteEmail    String?
+  direccion       String
+  metodoPago      String
+  producto        String    @default("")
+  tipoPiel        String?
+  aceite          String?
+  aroma           String?
+  tamanoId        String    @default("")
+  tamanoEtiqueta  String    @default("")
+  cantidad        Int       @default(1)
+  precioUnit      Int       @default(0)
+  total           Int       @default(0)
+  notasAdmin      String    @default("")
+  creadoEn        DateTime  @default(now())
+  realizadoEn     DateTime?
+  entregadoEn     DateTime?
+  canceladoEn     DateTime?
+
+  @@index([codigo])
+  @@map("pedidos")
+}
+
+// Costo de producir un jabón de cada tamaño (₡ por unidad).
+model CostoTamano {
+  id            String   @id @default(cuid())
+  tamanoId      String   @unique
+  etiqueta      String
+  costoUnitario Int
+  actualizadoEn DateTime @updatedAt
+
+  @@map("costos_tamano")
+}
+
+// Compras de materias primas con costo unitario calculado.
+model MateriaPrima {
+  id             String   @id @default(cuid())
+  nombre         String
+  categoria      String
+  cantidadCompra Float
+  unidad         String
+  costoTotal     Int
+  creadoEn       DateTime @default(now())
+  actualizadoEn  DateTime @updatedAt
+
+  @@map("materias_primas")
+}
+
+// Cuenta de la administradora (contraseña guardada con scrypt + salt).
+model AdminUser {
+  id            String   @id @default(cuid())
+  usuario       String   @unique
+  passwordHash  String
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  @@map("admin_users")
+}
+
+// Configuración clave-valor del sitio (número de WhatsApp, etc.).
+model Ajuste {
+  clave         String   @id
+  valor         String
+  actualizadoEn DateTime @updatedAt
+
+  @@map("ajustes")
+}
