@@ -85,12 +85,6 @@ export function Footer({ whatsapp }: { whatsapp: string }) {
             © {anio} {MARCA}. Todos los derechos reservados.
           </p>
           <p>Hecho a mano con ingredientes naturales · Costa Rica</p>
-          <a
-            href="/admin"
-            className="transition-opacity hover:opacity-100 hover:underline underline-offset-2"
-          >
-            Panel de administración
-          </a>
         </div>
       </div>
     </footer>
