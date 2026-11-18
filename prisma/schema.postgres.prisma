@@ -1,5 +1,7 @@
 // Variante del esquema para producción en Vercel + Neon (PostgreSQL).
 // El script `vercel-build` la usa automáticamente.
+// IMPORTANTE: debe mantenerse IDÉNTICO a schema.prisma (SQLite); lo único
+// que cambia es el "provider" de la base de datos.
 
 generator client {
   provider = "prisma-client-js"
@@ -10,10 +12,16 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Pedido creado desde el configurador de la web (o registrado a mano).
+// Un pedido con varios jabones (distinto aroma/tamaño/aceite) se guarda como
+// VARIAS FILAS con el MISMO código (una fila por línea del pedido); el panel
+// las agrupa por código para mostrarlas como un solo pedido.
 model Pedido {
   id              String    @id @default(cuid())
-  codigo          String    @unique
-  estado          String    @default("Pendiente")
+  codigo          String    @default("") // PED-... (compartido por todas las líneas)
+  lineaNum        Int       @default(1) // 1, 2, 3… posición de la línea dentro del pedido
+  estado          String    @default("Pendiente") // Pendiente | Realizado | Entregado | Cancelado
+
   clienteNombre   String
   clienteTelefono String
   clienteEmail    String?
@@ -34,9 +42,11 @@ model Pedido {
   entregadoEn     DateTime?
   canceladoEn     DateTime?
 
+  @@index([codigo])
   @@map("pedidos")
 }
 
+// Costo de producir un jabón de cada tamaño (₡ por unidad).
 model CostoTamano {
   id            String   @id @default(cuid())
   tamanoId      String   @unique
@@ -47,6 +57,7 @@ model CostoTamano {
   @@map("costos_tamano")
 }
 
+// Compras de materias primas con costo unitario calculado.
 model MateriaPrima {
   id             String   @id @default(cuid())
   nombre         String
@@ -60,6 +71,7 @@ model MateriaPrima {
   @@map("materias_primas")
 }
 
+// Cuenta de la administradora (contraseña guardada con scrypt + salt).
 model AdminUser {
   id            String   @id @default(cuid())
   usuario       String   @unique
@@ -70,6 +82,7 @@ model AdminUser {
   @@map("admin_users")
 }
 
+// Configuración clave-valor del sitio (número de WhatsApp, etc.).
 model Ajuste {
   clave         String   @id
   valor         String
