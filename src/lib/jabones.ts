@@ -345,3 +345,4 @@ export function enlaceWhatsApp(numero: string, mensaje: string): string {
 export function generarIdPedido(): string {
   return `PED-${Date.now()}`;
 }
+
