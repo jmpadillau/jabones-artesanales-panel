@@ -9,7 +9,12 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function AdminLoginPage() {
+// Dinámica: el aviso depende de la base de datos, no puede quedar fijo
+// en el HTML generado durante la compilación.
+export const dynamic = "force-dynamic";
+
+export default async function AdminLoginPage() {
+  const contraseñaPorDefecto = await usaContraseñaPorDefecto();
   return (
     <main className="fondo-botanico flex min-h-screen items-center justify-center bg-background px-4 py-10">
       <div className="w-full max-w-md">
@@ -29,7 +34,7 @@ export default function AdminLoginPage() {
             Panel privado de la administradora
           </p>
         </div>
-        <LoginForm contraseñaPorDefecto={usaContraseñaPorDefecto()} />
+        <LoginForm contraseñaPorDefecto={contraseñaPorDefecto} />
         <p className="mt-6 text-center text-xs text-muted-foreground">
           Área exclusiva del personal. Si no eres la administradora,{" "}
           <a href="/" className="underline underline-offset-2 hover:text-foreground">
