@@ -23,7 +23,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "By-Sil · Jabones Artesanales | Crea tu jabón a tu medida",
   description:
-    "Jabones artesanales By-Sil hechos a mano en Costa Rica. Elige tu tipo de piel, el aceite esencial, el aroma y el tamaño ideal. Pedidos por WhatsApp con pagos por Sinpe Móvil, efectivo o tarjeta.",
+    "Jabones artesanales By-Sil hechos a mano en Costa Rica. Elige tu tipo de piel, el aceite esencial, el aroma y el tamaño ideal. Pedidos por WhatsApp con pagos por Sinpe Móvil o efectivo.",
   keywords: [
     "By-Sil",
     "jabones artesanales",
@@ -67,3 +67,4 @@ export default function RootLayout({
     </html>
   );
 }
+
