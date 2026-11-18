@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   BadgeCheck,
   Eye,
@@ -46,6 +47,7 @@ export function AjustesPanel({
   const { toast } = useToast();
 
   // ---- 1. Cambio de contraseña ----
+  const router = useRouter();
   const [actual, setActual] = useState("");
   const [nueva, setNueva] = useState("");
   const [confirmar, setConfirmar] = useState("");
@@ -88,6 +90,8 @@ export function AjustesPanel({
         description:
           "Desde la próxima vez que entres al panel usa la contraseña nueva.",
       });
+      // Vuelve a leer el servidor: el aviso de «contraseña inicial» desaparece.
+      router.refresh();
     } catch {
       setErrorClave("Error de conexión. Intenta de nuevo.");
     } finally {
@@ -345,3 +349,4 @@ export function AjustesPanel({
     </div>
   );
 }
+
