@@ -25,10 +25,21 @@ export function contraseñaInicial(): string {
   return process.env.ADMIN_PASSWORD?.trim() || CONTRASENA_INICIAL_POR_DEFECTO;
 }
 
-/** true cuando el sitio aún corre con la contraseña sembrada por defecto
- *  (sin ADMIN_PASSWORD). Se usa para avisar en el login y en Ajustes. */
-export function usaContraseñaPorDefecto(): boolean {
-  return !process.env.ADMIN_PASSWORD?.trim();
+/** true SOLO mientras la contraseña guardada en la base de datos siga
+ *  siendo la inicial por defecto. En cuanto la administradora la cambia
+ *  desde Panel → Ajustes, devuelve false y los avisos desaparecen solos.
+ *  Si la base de datos no responde, devuelve false (no se muestra el aviso). */
+export async function usaContraseñaPorDefecto(): Promise<boolean> {
+  try {
+    await asegurarAdminUsuario();
+    const cuenta =
+      (await db.adminUser.findUnique({ where: { usuario: usuarioAdmin() } })) ??
+      (await db.adminUser.findFirst());
+    if (!cuenta) return false;
+    return verificarContraseña(CONTRASENA_INICIAL_POR_DEFECTO, cuenta.passwordHash);
+  } catch {
+    return false;
+  }
 }
 
 /** Hash en el mismo formato del panel By-Sil: "scrypt$salt$hash". */
