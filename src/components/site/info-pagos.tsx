@@ -27,7 +27,7 @@ export function InfoPagos() {
               Métodos de pago
             </h3>
             <p className="text-xs text-[#6b7c6d] leading-relaxed">
-              Sinpe Móvil, efectivo y tarjeta. Elige el que prefieras al hacer tu pedido.
+              Sinpe Móvil y efectivo. Elige el que prefieras al hacer tu pedido.
             </p>
           </div>
 
@@ -73,3 +73,4 @@ export function InfoPagos() {
     </section>
   )
 }
+
