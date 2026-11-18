@@ -18,6 +18,7 @@ export const dynamic = "force-dynamic";
 export default async function AdminAjustesPage() {
   await asegurarAjustesIniciales();
   const whatsapp = await numeroWhatsappTienda();
+  const contraseñaPorDefecto = await usaContraseñaPorDefecto();
 
   return (
     <div className="space-y-6">
@@ -34,7 +35,7 @@ export default async function AdminAjustesPage() {
       <AjustesPanel
         usuario={usuarioAdmin()}
         whatsappActual={whatsapp}
-        contraseñaPorDefecto={usaContraseñaPorDefecto()}
+        contraseñaPorDefecto={contraseñaPorDefecto}
       />
     </div>
   );
