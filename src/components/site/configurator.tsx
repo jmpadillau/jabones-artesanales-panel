@@ -821,7 +821,7 @@ export function Configurator({ whatsapp }: { whatsapp: string }) {
                     <RadioGroup
                       value={metodoPago}
                       onValueChange={(v) => setMetodoPago(v as MetodoPago)}
-                      className="grid gap-2 sm:grid-cols-3"
+                      className="grid gap-2 sm:grid-cols-2"
                     >
                       {METODOS_PAGO.map((m) => (
                         <Label
@@ -971,3 +971,4 @@ function MarcadorPendiente({ texto }: { texto: string }) {
     </div>
   );
 }
+
