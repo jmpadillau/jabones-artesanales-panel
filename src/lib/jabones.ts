@@ -238,7 +238,6 @@ export const TAMANOS: Tamano[] = [
 export const METODOS_PAGO = [
   "Sinpe Móvil",
   "Efectivo",
-  "Tarjeta",
 ] as const;
 export type MetodoPago = (typeof METODOS_PAGO)[number];
 
