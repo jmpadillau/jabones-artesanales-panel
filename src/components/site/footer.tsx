@@ -74,7 +74,7 @@ export function Footer({ whatsapp }: { whatsapp: string }) {
               </li>
             </ul>
             <p className="mt-5 rounded-2xl bg-white/5 p-3.5 text-xs leading-relaxed opacity-80">
-              Aceptamos Sinpe Móvil, efectivo y tarjeta. Los pedidos se
+              Aceptamos Sinpe Móvil y efectivo. Los pedidos se
               confirman y coordinan por WhatsApp.
             </p>
           </div>
@@ -90,3 +90,4 @@ export function Footer({ whatsapp }: { whatsapp: string }) {
     </footer>
   );
 }
+
