@@ -3,14 +3,17 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Ban,
   BadgeCheck,
   Eye,
   EyeOff,
   Info,
   KeyRound,
   Loader2,
+  Mail,
   MessageCircle,
   Save,
+  Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,9 +23,10 @@ import { useToast } from "@/hooks/use-toast";
 import { WHATSAPP_TIENDA } from "@/lib/jabones";
 
 /**
- * Dos gestiones solicitadas por la administradora:
+ * Tres gestiones de la administradora:
  *  1. Cambiar la contraseña de su cuenta.
  *  2. Actualizar el número de WhatsApp de la tienda.
+ *  3. Configurar la cuenta de Gmail que envía el respaldo al cliente.
  */
 
 const soloDigitos = (v: string) => v.replace(/\D/g, "");
@@ -39,10 +43,12 @@ export function AjustesPanel({
   usuario,
   whatsappActual,
   contraseñaPorDefecto,
+  correoActual,
 }: {
   usuario: string;
   whatsappActual: string;
   contraseñaPorDefecto: boolean;
+  correoActual: { usuario: string | null; configurado: boolean };
 }) {
   const { toast } = useToast();
 
@@ -146,6 +152,120 @@ export function AjustesPanel({
       });
     } finally {
       setGuardandoNumero(false);
+    }
+  }
+
+  // ---- 3. Correo de respaldo al cliente (cuenta de Gmail) ----
+  const [correo, setCorreo] = useState(correoActual);
+  const [correoUsuario, setCorreoUsuario] = useState(correoActual.usuario ?? "");
+  const [correoClave, setCorreoClave] = useState("");
+  const [mostrarCorreoClave, setMostrarCorreoClave] = useState(false);
+  const [guardandoCorreo, setGuardandoCorreo] = useState(false);
+  const [probandoCorreo, setProbandoCorreo] = useState(false);
+  const [errorCorreo, setErrorCorreo] = useState<string | null>(null);
+  const correoListo =
+    correoUsuario.trim().includes("@") && correoClave.replace(/\s/g, "").length >= 8;
+
+  async function guardarCorreo(e: React.FormEvent) {
+    e.preventDefault();
+    setErrorCorreo(null);
+    setGuardandoCorreo(true);
+    try {
+      const res = await fetch("/api/admin/correo", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          usuario: correoUsuario.trim(),
+          clave: correoClave,
+        }),
+      });
+      const datos = (await res.json()) as {
+        ok: boolean;
+        error?: string;
+        usuario?: string;
+      };
+      if (!res.ok || !datos.ok) {
+        setErrorCorreo(datos.error ?? "No se pudo guardar la cuenta de correo.");
+        return;
+      }
+      setCorreo({ usuario: datos.usuario ?? correoUsuario.trim(), configurado: true });
+      setCorreoUsuario(datos.usuario ?? correoUsuario.trim());
+      setCorreoClave("");
+      toast({
+        title: "Cuenta de correo guardada \u{2709}\u{fe0f}",
+        description:
+          "Los clientes que dejen su correo recibirán el respaldo de su pedido desde esta cuenta.",
+      });
+      router.refresh();
+    } catch {
+      setErrorCorreo("Error de conexión. Intenta de nuevo.");
+    } finally {
+      setGuardandoCorreo(false);
+    }
+  }
+
+  async function probarCorreo() {
+    setProbandoCorreo(true);
+    try {
+      const res = await fetch("/api/admin/correo", { method: "POST" });
+      const datos = (await res.json()) as {
+        ok: boolean;
+        error?: string;
+        para?: string;
+      };
+      if (!res.ok || !datos.ok) {
+        toast({
+          variant: "destructive",
+          title: "No se pudo enviar la prueba",
+          description: datos.error ?? "Intenta de nuevo en unos minutos.",
+        });
+        return;
+      }
+      toast({
+        title: "Correo de prueba enviado",
+        description: `Revisa la bandeja de ${datos.para} (y la carpeta de spam).`,
+      });
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "Error de conexión",
+        description: "No se pudo enviar el correo de prueba.",
+      });
+    } finally {
+      setProbandoCorreo(false);
+    }
+  }
+
+  async function desactivarCorreo() {
+    if (
+      !window.confirm(
+        "¿Dejar de enviar correos de respaldo a los clientes? Podrás activarlo de nuevo cuando quieras."
+      )
+    ) {
+      return;
+    }
+    try {
+      const res = await fetch("/api/admin/correo", { method: "DELETE" });
+      const datos = (await res.json()) as { ok: boolean; error?: string };
+      if (!res.ok || !datos.ok) {
+        toast({
+          variant: "destructive",
+          title: "No se pudo desactivar",
+          description: datos.error ?? "Intenta de nuevo.",
+        });
+        return;
+      }
+      setCorreo({ usuario: null, configurado: false });
+      setCorreoUsuario("");
+      setCorreoClave("");
+      toast({ title: "Envío de correos desactivado" });
+      router.refresh();
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "Error de conexión",
+        description: "No se pudo desactivar el envío.",
+      });
     }
   }
 
@@ -346,7 +466,170 @@ export function AjustesPanel({
             : "Escribe un número distinto para habilitar el botón."}
         </p>
       </section>
+
+      {/* ======== 3. CORREO DE RESPALDO AL CLIENTE ======== */}
+      <section
+        aria-labelledby="titulo-correo"
+        className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-6 lg:col-span-2"
+      >
+        <div className="mb-1 flex items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-secondary text-salvia">
+            <Mail className="h-5 w-5" aria-hidden />
+          </span>
+          <h2
+            id="titulo-correo"
+            className="font-display text-xl font-semibold text-foreground"
+          >
+            Correo de respaldo al cliente
+          </h2>
+        </div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Cuando un cliente deja su correo al hacer el pedido, recibe un resumen
+          igual al de WhatsApp, enviado desde la cuenta de Gmail que configures
+          aquí. Solo lo recibe el cliente: tú ya ves el pedido en el panel.
+        </p>
+
+        <div className="mt-4 rounded-2xl bg-secondary/60 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-salvia">
+            Cuenta de envío vigente
+          </p>
+          {correo.configurado ? (
+            <p className="font-display mt-0.5 break-all text-xl font-semibold text-primary">
+              {correo.usuario}
+            </p>
+          ) : (
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              Sin configurar: por ahora los clientes no reciben correo.
+            </p>
+          )}
+        </div>
+
+        <form
+          onSubmit={guardarCorreo}
+          className="mt-4 space-y-4"
+          aria-label="Configurar correo de envío"
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="correo-usuario">Correo de envío (Gmail)</Label>
+              <Input
+                id="correo-usuario"
+                type="email"
+                inputMode="email"
+                autoComplete="off"
+                placeholder="tucuenta@gmail.com"
+                value={correoUsuario}
+                onChange={(e) => setCorreoUsuario(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="correo-clave">Contraseña de aplicación de Google</Label>
+              <div className="relative">
+                <Input
+                  id="correo-clave"
+                  type={mostrarCorreoClave ? "text" : "password"}
+                  autoComplete="new-password"
+                  placeholder="16 letras, con o sin espacios"
+                  value={correoClave}
+                  onChange={(e) => setCorreoClave(e.target.value)}
+                  className="pr-10"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setMostrarCorreoClave((m) => !m)}
+                  className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted-foreground hover:text-foreground"
+                  aria-label={
+                    mostrarCorreoClave
+                      ? "Ocultar contraseña de aplicación"
+                      : "Mostrar contraseña de aplicación"
+                  }
+                >
+                  {mostrarCorreoClave ? (
+                    <EyeOff className="h-4 w-4" aria-hidden />
+                  ) : (
+                    <Eye className="h-4 w-4" aria-hidden />
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <details className="rounded-2xl border border-border bg-background p-3 text-sm">
+            <summary className="cursor-pointer font-medium text-foreground">
+              ¿Cómo obtengo la contraseña de aplicación?
+            </summary>
+            <ol className="mt-2 list-decimal space-y-1 pl-5 text-muted-foreground">
+              <li>
+                En la cuenta de Google del correo, activa la{" "}
+                <strong>verificación en dos pasos</strong>.
+              </li>
+              <li>
+                Entra a{" "}
+                <span className="font-mono">myaccount.google.com/apppasswords</span>.
+              </li>
+              <li>
+                Crea una con el nombre «By-Sil» y copia las 16 letras que
+                aparecen.
+              </li>
+              <li>
+                Pégalas aquí. Para cambiar de cuenta, escribe el nuevo correo y
+                su propia contraseña de aplicación.
+              </li>
+            </ol>
+          </details>
+
+          {errorCorreo && (
+            <p
+              role="alert"
+              className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            >
+              {errorCorreo}
+            </p>
+          )}
+
+          <div className="flex flex-col gap-2.5 sm:flex-row">
+            <Button
+              type="submit"
+              className="rounded-full sm:flex-1"
+              disabled={guardandoCorreo || !correoListo}
+            >
+              {guardandoCorreo ? (
+                <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+              ) : (
+                <Save className="h-4 w-4" aria-hidden />
+              )}
+              Guardar y verificar
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full sm:flex-1"
+              onClick={probarCorreo}
+              disabled={probandoCorreo || !correo.configurado}
+            >
+              {probandoCorreo ? (
+                <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+              ) : (
+                <Send className="h-4 w-4" aria-hidden />
+              )}
+              Enviarme un correo de prueba
+            </Button>
+            {correo.configurado && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="rounded-full text-muted-foreground hover:text-destructive"
+                onClick={desactivarCorreo}
+              >
+                <Ban className="h-4 w-4" aria-hidden />
+                Desactivar envío
+              </Button>
+            )}
+          </div>
+        </form>
+      </section>
     </div>
   );
 }
-
