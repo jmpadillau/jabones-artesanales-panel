@@ -11,6 +11,7 @@ import {
   numeroWhatsappTienda,
   usaContraseñaPorDefecto,
 } from "@/lib/ajustes";
+import { estadoCorreo } from "@/lib/correo";
 import { AjustesPanel } from "@/components/admin/ajustes-panel";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +20,7 @@ export default async function AdminAjustesPage() {
   await asegurarAjustesIniciales();
   const whatsapp = await numeroWhatsappTienda();
   const contraseñaPorDefecto = await usaContraseñaPorDefecto();
+  const correoActual = await estadoCorreo();
 
   return (
     <div className="space-y-6">
@@ -36,6 +38,7 @@ export default async function AdminAjustesPage() {
         usuario={usuarioAdmin()}
         whatsappActual={whatsapp}
         contraseñaPorDefecto={contraseñaPorDefecto}
+        correoActual={correoActual}
       />
     </div>
   );
