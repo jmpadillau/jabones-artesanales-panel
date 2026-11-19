@@ -4,9 +4,9 @@ import { useState } from "react";
 import Image from "next/image";
 import {
   Check,
-  Copy,
   Flower2,
   Leaf,
+  Loader2,
   MessageCircle,
   Minus,
   MousePointerClick,
@@ -53,6 +53,14 @@ type LineaCarrito = LineaPedido & { id: string };
 /** Contador local para dar un identificador a cada línea agregada. */
 let contadorLineas = 0;
 
+/** Línea que se añade al mensaje de WhatsApp si el pedido no pudo
+ *  registrarse en el panel: así la artesana lo nota en el propio chat. */
+const AVISO_NO_REGISTRADO =
+  "\u{26a0}\u{fe0f} Pedido pendiente de registrar en el panel (aviso automático)";
+
+/** Tiempo máximo de espera por cada intento de registro (ms). */
+const ESPERA_REGISTRO_MS = 9000;
+
 export function Configurator({ whatsapp }: { whatsapp: string }) {
   // ====== Selección en curso (el "constructor" de una línea) ======
   const [piel, setPiel] = useState<TipoPiel | null>(null);
@@ -72,6 +80,7 @@ export function Configurator({ whatsapp }: { whatsapp: string }) {
   const [metodoPago, setMetodoPago] = useState<MetodoPago>("Sinpe Móvil");
   const [errores, setErrores] = useState<string[]>([]);
   const [idPedido, setIdPedido] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
   const { toast } = useToast();
 
   const completo = Boolean(piel && aceite && aroma && tamano);
@@ -189,8 +198,11 @@ export function Configurator({ whatsapp }: { whatsapp: string }) {
     };
   }
 
-  /** Registra el pedido en el panel de la administradora (respaldo automático). */
-  function registrarPedidoEnPanel(codigo: string) {
+  /** Registra el pedido en el panel de la administradora (respaldo automático).
+   *  Reintenta UNA vez si falla la conexión o el servidor (error 5xx). No
+   *  reintenta si el servidor rechazó los datos (4xx) ni si se agotó el tiempo
+   *  (en ese caso el pedido podría haberse guardado ya y se duplicaría). */
+  async function registrarPedidoEnPanel(codigo: string): Promise<"ok" | "fallo"> {
     const cuerpo = {
       codigo,
       clienteNombre: nombre.trim(),
@@ -206,17 +218,30 @@ export function Configurator({ whatsapp }: { whatsapp: string }) {
         cantidad: l.cantidad,
       })),
     };
-    fetch("/api/pedidos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(cuerpo),
-      keepalive: true,
-    }).catch(() => {
-      // Silencioso: el pedido igual llega por WhatsApp.
-    });
+    for (let intento = 1; intento <= 2; intento++) {
+      const control = new AbortController();
+      const temporizador = setTimeout(() => control.abort(), ESPERA_REGISTRO_MS);
+      try {
+        const res = await fetch("/api/pedidos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(cuerpo),
+          signal: control.signal,
+        });
+        if (res.ok) return "ok"; // 200/201 (incluye «ya registrado»)
+        if (res.status < 500) return "fallo"; // datos rechazados: reintentar no sirve
+      } catch {
+        if (control.signal.aborted) return "fallo"; // tiempo agotado: no duplicar
+      } finally {
+        clearTimeout(temporizador);
+      }
+      if (intento === 1) await new Promise((r) => setTimeout(r, 1200));
+    }
+    return "fallo";
   }
 
-  function enviarWhatsApp() {
+  async function enviarWhatsApp() {
+    if (enviando) return;
     const r = prepararMensaje();
     if (!r.ok) {
       toast({
@@ -226,39 +251,38 @@ export function Configurator({ whatsapp }: { whatsapp: string }) {
       });
       return;
     }
-    registrarPedidoEnPanel(r.id);
-    window.open(enlaceWhatsApp(whatsapp, r.mensaje), "_blank", "noopener,noreferrer");
-    toast({
-      title: "¡Tu pedido está listo en WhatsApp! \u{1f33f}",
-      description:
-        "Se abrió WhatsApp con el resumen precargado; solo presiona enviar.",
-    });
-  }
-
-  async function copiarResumen() {
-    const r = prepararMensaje();
-    if (!r.ok) {
-      toast({
-        variant: "destructive",
-        title: "Falta información del pedido",
-        description: `Por favor completa: ${r.faltantes.join(", ")}.`,
-      });
-      return;
+    setEnviando(true);
+    // La pestaña se abre en el mismo clic (así el navegador no la bloquea) y
+    // se envía a WhatsApp cuando ya se intentó registrar el pedido.
+    const ventana = window.open("", "_blank");
+    if (ventana) {
+      try {
+        ventana.opener = null;
+        ventana.document.write(
+          '<p style="font-family:sans-serif;padding:24px;color:#2d4a3e">Preparando tu pedido\u{2026}</p>'
+        );
+      } catch {
+        // Sin acceso a la pestaña nueva: no pasa nada, se navega igual.
+      }
     }
     try {
-      await navigator.clipboard.writeText(r.mensaje);
-    } catch {
-      const ta = document.createElement("textarea");
-      ta.value = r.mensaje;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      ta.remove();
+      const estado = await registrarPedidoEnPanel(r.id);
+      const mensaje =
+        estado === "ok" ? r.mensaje : `${r.mensaje}\n${AVISO_NO_REGISTRADO}`;
+      const enlace = enlaceWhatsApp(whatsapp, mensaje);
+      if (ventana) {
+        if (!ventana.closed) ventana.location.href = enlace;
+      } else {
+        window.location.href = enlace; // el navegador bloqueó la pestaña nueva
+      }
+      toast({
+        title: "¡Tu pedido está listo en WhatsApp! \u{1f33f}",
+        description:
+          "Se abrió WhatsApp con el resumen precargado; solo presiona enviar.",
+      });
+    } finally {
+      setEnviando(false);
     }
-    toast({
-      title: "Resumen copiado al portapapeles",
-      description: "Pégalo en WhatsApp o donde lo necesites.",
-    });
   }
 
   const pasosResumen = [
@@ -848,19 +872,14 @@ export function Configurator({ whatsapp }: { whatsapp: string }) {
                     size="lg"
                     className="w-full rounded-full text-base"
                     onClick={enviarWhatsApp}
+                    disabled={enviando}
                   >
-                    <MessageCircle className="h-5 w-5" aria-hidden />
-                    Enviar pedido por WhatsApp
-                  </Button>
-                  <Button
-                    type="button"
-                    size="lg"
-                    variant="outline"
-                    className="w-full rounded-full"
-                    onClick={copiarResumen}
-                  >
-                    <Copy className="h-4 w-4" aria-hidden />
-                    Copiar resumen del pedido
+                    {enviando ? (
+                      <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+                    ) : (
+                      <MessageCircle className="h-5 w-5" aria-hidden />
+                    )}
+                    {enviando ? "Preparando tu pedido…" : "Enviar pedido por WhatsApp"}
                   </Button>
                   <div className="flex items-center justify-between pt-1">
                     <p className="text-xs leading-snug text-muted-foreground">
@@ -971,4 +990,3 @@ function MarcadorPendiente({ texto }: { texto: string }) {
     </div>
   );
 }
-
