@@ -7,10 +7,11 @@
  * este guardado es un respaldo automático para el panel.
  * Si el cliente dejó su correo y la administradora configuró una cuenta de
  * Gmail en Panel → Ajustes, el cliente recibe además un correo de respaldo
- * (solo él; la administradora ya ve el pedido en el panel).
+ * (solo él; la administradora ya ve el pedido en el panel). El correo se envía
+ * después de responder, para no hacer esperar al cliente.
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import {
@@ -110,29 +111,33 @@ export async function POST(req: NextRequest) {
       })),
     });
 
-    // ---- Correo de respaldo al cliente (nunca debe romper el pedido) ----
-    let correo: "enviado" | "omitido" | "error" = "omitido";
+    // ---- Correo de respaldo al cliente ----
+    // Se envía DESPUÉS de responder (after): el cliente no espera a Gmail y,
+    // si el correo falla, el pedido ya quedó registrado igual.
+    let correo: "programado" | "omitido" = "omitido";
     const emailCliente = datos.clienteEmail?.trim() ?? "";
     if (emailCliente && esCorreoValido(emailCliente)) {
-      try {
-        // Anti-abuso: máx. 5 pedidos por correo en 24 h (cuenta el actual).
-        const hace24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        const recientes = await db.pedido.count({
-          where: {
-            clienteEmail: emailCliente,
-            lineaNum: 1,
-            creadoEn: { gte: hace24h },
-          },
-        });
-        if (recientes <= 5) {
-          const lineasCorreo: LineaPedido[] = lineasValidadas.map((l) => ({
-            piel: TIPOS_PIEL.find((t) => t.nombre === l.tipoPiel) ?? null,
-            aceite: l.aceite || null,
-            aroma: l.aroma || null,
-            tamano: l.tamano,
-            cantidad: l.cantidad,
-          }));
-          const resultado = await enviarConfirmacionPedido({
+      correo = "programado";
+      const lineasCorreo: LineaPedido[] = lineasValidadas.map((l) => ({
+        piel: TIPOS_PIEL.find((t) => t.nombre === l.tipoPiel) ?? null,
+        aceite: l.aceite || null,
+        aroma: l.aroma || null,
+        tamano: l.tamano,
+        cantidad: l.cantidad,
+      }));
+      after(async () => {
+        try {
+          // Anti-abuso: máx. 5 pedidos por correo en 24 h (cuenta el actual).
+          const hace24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+          const recientes = await db.pedido.count({
+            where: {
+              clienteEmail: emailCliente,
+              lineaNum: 1,
+              creadoEn: { gte: hace24h },
+            },
+          });
+          if (recientes > 5) return;
+          await enviarConfirmacionPedido({
             codigo: datos.codigo,
             nombre: datos.clienteNombre,
             telefono: datos.clienteTelefono,
@@ -141,12 +146,10 @@ export async function POST(req: NextRequest) {
             metodoPago: datos.metodoPago,
             lineas: lineasCorreo,
           });
-          correo = resultado === "enviado" ? "enviado" : "omitido";
+        } catch (errorCorreo) {
+          console.error("[POST /api/pedidos] correo de respaldo", errorCorreo);
         }
-      } catch (errorCorreo) {
-        correo = "error";
-        console.error("[POST /api/pedidos] correo de respaldo", errorCorreo);
-      }
+      });
     }
 
     return NextResponse.json(
