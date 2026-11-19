@@ -5,12 +5,21 @@
  * agrupa por código. Todo queda en estado "Pendiente" y aparece de inmediato
  * en el panel de la administradora. El flujo de WhatsApp se mantiene igual;
  * este guardado es un respaldo automático para el panel.
+ * Si el cliente dejó su correo y la administradora configuró una cuenta de
+ * Gmail en Panel → Ajustes, el cliente recibe además un correo de respaldo
+ * (solo él; la administradora ya ve el pedido en el panel).
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { TAMANOS, nombreProducto } from "@/lib/jabones";
+import {
+  TAMANOS,
+  TIPOS_PIEL,
+  nombreProducto,
+  type LineaPedido,
+} from "@/lib/jabones";
+import { enviarConfirmacionPedido, esCorreoValido } from "@/lib/correo";
 
 // Limitador simple en memoria: máx. 12 pedidos por IP cada hora (anti-abuso).
 const VENTANA_MS = 60 * 60 * 1000;
@@ -101,8 +110,47 @@ export async function POST(req: NextRequest) {
       })),
     });
 
+    // ---- Correo de respaldo al cliente (nunca debe romper el pedido) ----
+    let correo: "enviado" | "omitido" | "error" = "omitido";
+    const emailCliente = datos.clienteEmail?.trim() ?? "";
+    if (emailCliente && esCorreoValido(emailCliente)) {
+      try {
+        // Anti-abuso: máx. 5 pedidos por correo en 24 h (cuenta el actual).
+        const hace24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const recientes = await db.pedido.count({
+          where: {
+            clienteEmail: emailCliente,
+            lineaNum: 1,
+            creadoEn: { gte: hace24h },
+          },
+        });
+        if (recientes <= 5) {
+          const lineasCorreo: LineaPedido[] = lineasValidadas.map((l) => ({
+            piel: TIPOS_PIEL.find((t) => t.nombre === l.tipoPiel) ?? null,
+            aceite: l.aceite || null,
+            aroma: l.aroma || null,
+            tamano: l.tamano,
+            cantidad: l.cantidad,
+          }));
+          const resultado = await enviarConfirmacionPedido({
+            codigo: datos.codigo,
+            nombre: datos.clienteNombre,
+            telefono: datos.clienteTelefono,
+            email: emailCliente,
+            direccion: datos.direccion,
+            metodoPago: datos.metodoPago,
+            lineas: lineasCorreo,
+          });
+          correo = resultado === "enviado" ? "enviado" : "omitido";
+        }
+      } catch (errorCorreo) {
+        correo = "error";
+        console.error("[POST /api/pedidos] correo de respaldo", errorCorreo);
+      }
+    }
+
     return NextResponse.json(
-      { ok: true, id: datos.codigo, lineas: lineasValidadas.length },
+      { ok: true, id: datos.codigo, lineas: lineasValidadas.length, correo },
       { status: 201 }
     );
   } catch (error) {
