@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
+  ClipboardList,
   Copy,
   Download,
   MessageCircle,
@@ -30,6 +31,7 @@ import {
   type Estado,
 } from "@/lib/estadisticas";
 import { EstadoBadge } from "@/components/admin/estado-badge";
+import { ProduccionLotes, ToggleItem } from "@/components/admin/produccion-lotes";
 
 /** Una fila de la tabla pedidos (una LÍNEA del pedido). */
 export interface PedidoAdmin {
@@ -37,6 +39,7 @@ export interface PedidoAdmin {
   codigo: string;
   lineaNum: number;
   estado: string;
+  estadoItem: string; // estatus del jabón (línea): Pendiente | Realizado
   creadoEn: string;
   realizadoEn: string | null;
   entregadoEn: string | null;
@@ -48,6 +51,7 @@ export interface PedidoAdmin {
   direccion: string;
   metodoPago: string;
   producto: string;
+  tamanoId: string;
   tipoPiel: string | null;
   aceite: string | null;
   aroma: string | null;
@@ -74,6 +78,8 @@ interface PedidoGrupo {
   lineas: PedidoAdmin[];
   unidades: number;
   total: number;
+  /** Líneas (jabones) ya marcadas como Realizado. */
+  realizadas: number;
 }
 
 /** Agrupa las filas por código de pedido (una fila = una línea). */
@@ -103,6 +109,7 @@ function agrupar(filas: PedidoAdmin[]): PedidoGrupo[] {
       lineas: ordenadas,
       unidades: ordenadas.reduce((s, l) => s + l.cantidad, 0),
       total: ordenadas.reduce((s, l) => s + l.total, 0),
+      realizadas: ordenadas.filter((l) => l.estadoItem === "Realizado").length,
     };
   });
 }
@@ -120,13 +127,22 @@ export function PedidosGestor({ pedidos }: { pedidos: PedidoAdmin[] }) {
   const [pendienteAPI, iniciarTransicion] = useTransition();
   const [filtro, setFiltro] = useState<"Todos" | Estado>("Todos");
   const [busqueda, setBusqueda] = useState("");
-  const [detalle, setDetalle] = useState<PedidoGrupo | null>(null);
+  const [vista, setVista] = useState<"pedidos" | "produccion">("pedidos");
+  // Se guarda solo el código: así el diálogo siempre muestra datos al día
+  // (por ejemplo, tras marcar un jabón como Realizado).
+  const [detalleCodigo, setDetalleCodigo] = useState<string | null>(null);
   const [notasBorrador, setNotasBorrador] = useState("");
+  const [itemOcupado, setItemOcupado] = useState<string | null>(null);
 
   // Todas las filas del pedido actualmente abierto en el diálogo.
   const idsDe = (g: PedidoGrupo | null) => (g ? g.lineas.map((l) => l.id) : []);
 
   const grupos = useMemo(() => agrupar(pedidos), [pedidos]);
+  const detalle = useMemo(
+    () => (detalleCodigo ? (grupos.find((g) => g.codigo === detalleCodigo) ?? null) : null),
+    [grupos, detalleCodigo]
+  );
+  const setDetalle = (g: PedidoGrupo | null) => setDetalleCodigo(g ? g.codigo : null);
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -179,6 +195,50 @@ export function PedidosGestor({ pedidos }: { pedidos: PedidoAdmin[] }) {
     iniciarTransicion(() => router.refresh());
   }
 
+  /** Marca un jabón (línea) como Pendiente/Realizado. Si con eso el pedido
+   *  cambia de estado automáticamente, avisa con un toast. */
+  async function cambiarItem(idLinea: string, nuevo: "Pendiente" | "Realizado") {
+    setItemOcupado(idLinea);
+    try {
+      const res = await fetch(`/api/admin/pedidos/${idLinea}/item`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ estadoItem: nuevo }),
+      });
+      const datos = (await res.json()) as {
+        ok: boolean;
+        error?: string;
+        pedido?: {
+          codigo: string;
+          clienteNombre: string;
+          estadoAnterior: string;
+          estadoNuevo: string;
+          cambio: boolean;
+        };
+      };
+      if (!res.ok || !datos.ok || !datos.pedido) {
+        toast({
+          variant: "destructive",
+          title: "No se pudo actualizar el jabón",
+          description: datos.error,
+        });
+        return;
+      }
+      if (datos.pedido.cambio) {
+        const p = datos.pedido;
+        toast({
+          title: "Estatus del pedido actualizado",
+          description: `El pedido ${p.codigo} de ${p.clienteNombre} pasó de ${p.estadoAnterior} a ${p.estadoNuevo}.`,
+        });
+      }
+      iniciarTransicion(() => router.refresh());
+    } catch {
+      toast({ variant: "destructive", title: "Error de conexión" });
+    } finally {
+      setItemOcupado(null);
+    }
+  }
+
   function abrirNotas(pedido: PedidoGrupo) {
     setDetalle(pedido);
     setNotasBorrador(pedido.notasAdmin ?? "");
@@ -224,6 +284,44 @@ export function PedidosGestor({ pedidos }: { pedidos: PedidoAdmin[] }) {
 
   return (
     <div className="space-y-4">
+      {/* Cambio de vista */}
+      <div className="flex gap-1.5" role="tablist" aria-label="Vista de pedidos">
+        {(
+          [
+            ["pedidos", "Pedidos", Package],
+            ["produccion", "Producción por lotes", ClipboardList],
+          ] as const
+        ).map(([id, etiqueta, Icono]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={vista === id}
+            onClick={() => setVista(id)}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-sm transition-colors",
+              vista === id
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-card hover:bg-secondary"
+            )}
+          >
+            <Icono className="h-4 w-4" aria-hidden />
+            {etiqueta}
+          </button>
+        ))}
+      </div>
+
+      {vista === "produccion" && (
+        <ProduccionLotes
+          filas={pedidos}
+          itemOcupado={itemOcupado}
+          deshabilitado={pendienteAPI}
+          onCambiarItem={cambiarItem}
+        />
+      )}
+
+      {vista === "pedidos" && (
+      <>
       {/* Filtros y búsqueda */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar por estado">
@@ -294,6 +392,11 @@ export function PedidosGestor({ pedidos }: { pedidos: PedidoAdmin[] }) {
                           {p.lineas.length} variedades · {p.unidades} jabones
                         </span>
                       )}
+                      {p.estado !== "Cancelado" && (
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-foreground/70">
+                          {p.realizadas}/{p.lineas.length} realizados
+                        </span>
+                      )}
                     </div>
                     <p className="mt-1 truncate font-semibold text-foreground">
                       {p.clienteNombre} ·{" "}
@@ -320,6 +423,34 @@ export function PedidosGestor({ pedidos }: { pedidos: PedidoAdmin[] }) {
                     </p>
                   </div>
                 </div>
+
+                {/* Estatus por jabón */}
+                <ul
+                  className="mt-3 divide-y divide-border/60 rounded-2xl border border-border/70 bg-background/60"
+                  aria-label={`Jabones del pedido ${p.codigo}`}
+                >
+                  {p.lineas.map((l) => (
+                    <li
+                      key={l.id}
+                      className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+                    >
+                      <p className="min-w-0">
+                        <span className="font-medium">{l.cantidad}× {l.producto}</span>
+                        <span className="text-muted-foreground">
+                          {l.aroma ? ` · ${l.aroma}` : ""}
+                        </span>
+                      </p>
+                      <ToggleItem
+                        linea={l}
+                        bloqueado={
+                          pendienteAPI || (p.estado !== "Pendiente" && p.estado !== "Realizado")
+                        }
+                        ocupado={itemOcupado === l.id}
+                        onCambiar={(nuevo) => cambiarItem(l.id, nuevo)}
+                      />
+                    </li>
+                  ))}
+                </ul>
 
                 {/* Marcas de tiempo por etapa */}
                 <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
@@ -389,6 +520,9 @@ export function PedidosGestor({ pedidos }: { pedidos: PedidoAdmin[] }) {
         </ul>
       )}
 
+      </>
+      )}
+
       {/* Detalle + notas internas */}
       <Dialog open={detalle !== null} onOpenChange={(abierto) => !abierto && setDetalle(null)}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
@@ -437,6 +571,17 @@ export function PedidosGestor({ pedidos }: { pedidos: PedidoAdmin[] }) {
                         <p className="shrink-0 font-semibold text-primary">
                           {formatoCRC(l.total)}
                         </p>
+                      </div>
+                      <div className="pl-7">
+                        <ToggleItem
+                          linea={l}
+                          bloqueado={
+                            pendienteAPI ||
+                            (detalle.estado !== "Pendiente" && detalle.estado !== "Realizado")
+                          }
+                          ocupado={itemOcupado === l.id}
+                          onCambiar={(nuevo) => cambiarItem(l.id, nuevo)}
+                        />
                       </div>
                       <p className="pl-7 text-xs text-muted-foreground">
                         {l.aroma ? `Aroma ${l.aroma}` : "Sin aroma definido"}
