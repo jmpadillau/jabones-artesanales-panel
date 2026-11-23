@@ -32,7 +32,7 @@ administración** para gestionar pedidos, ingresos, costos, ganancias y los
 | **Configurador** | 4 pasos por jabón: tipo de piel → aceite esencial → aroma (+ «Sorpréndeme») → tamaño y cantidad, con filtrado automático | 
 | **Pedido de varios jabones** | Botón «Agregar al pedido»: combina cuantos jabones quieras (distintos aceites, aromas y tamaños) en UN solo pedido y envíalo todo junto | 
 | **Resumen del pedido** | Lista de jabones agregados (editable: cantidad y quitar), total en colones (₡) al instante, datos de envío y método de pago | 
-| **Envío por WhatsApp** | Abre WhatsApp con el pedido precargado (ID incluido) y botón para copiar el resumen |
+| **Envío por WhatsApp** | Abre WhatsApp con el pedido precargado (ID incluido); el cliente conserva el detalle en el hilo de WhatsApp |
 | **Registro automático** | Al enviar el pedido queda guardado y aparece en el panel como «Pendiente» |
 | **Catálogo** | Imagen grande del catálogo oficial (aromas y aceites esenciales según tipo de piel), ampliable al tocarla, con botón al configurador. Los aceites con sus propiedades y los aromas se explican dentro del configurador |
 | **Pagos y envíos** | Sinpe Móvil, efectivo y tarjeta |
@@ -100,6 +100,10 @@ Accede con el enlace del pie de página o directamente en `/admin`.
 - **Resumen**: ingresos, unidades vendidas, ganancia estimada y pedidos por
   atender, con evolución de los últimos 6 meses y favoritos.
 - **Pedidos**: estados `Pendiente → Realizado → Entregado` (y `Cancelado`).
+  Cada jabón (línea) se marca `Pendiente`/`Realizado`; al estar todos
+  `Realizado`, el pedido pasa solo a `Realizado` (y vuelve a `Pendiente` si se
+  desmarca alguno). La pestaña **Producción por lotes** agrupa lo pendiente por
+  tamaño, aceite y aroma.
   Cada cambio guarda su **marca de fecha y hora**. Los pedidos con varios
   jabones aparecen como una sola tarjeta con sus líneas (variedades) y el
   total del pedido. Incluye notas internas, buscador, filtros, contacto
@@ -236,6 +240,12 @@ usan el número vigente **en cada visita** (se lee de la base de datos).
 El valor de respaldo vive en `src/lib/jabones.ts` (`WHATSAPP_TIENDA`).
 
 ## ✏️ Editar catálogo, precios o aromas
+
+> **Aceites esenciales y aromas** se administran ahora desde **Panel → Catálogo**
+> (agregar, editar y eliminar; se guardan en la base de datos y la tienda los
+> lee en cada visita). Los valores de `src/lib/jabones.ts` solo se usan para
+> llenar la base la primera vez y como respaldo si la base no responde.
+> Tamaños y precios se siguen editando en ese archivo.
 
 Todo vive en **`src/lib/jabones.ts`** (sincronizado hoy con el panel By-Sil):
 
