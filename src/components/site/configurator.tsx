@@ -33,13 +33,12 @@ import {
   enlaceWhatsApp,
   METODOS_PAGO,
   nombreProducto,
-  propiedadesDe,
   subtotalLinea,
   SORPRENDEME,
   TAMANOS,
-  TIPOS_PIEL,
   totalPedido,
   unidadesPedido,
+  type CatalogoTienda,
   type DatosCliente,
   type LineaPedido,
   type MetodoPago,
@@ -61,7 +60,16 @@ const AVISO_NO_REGISTRADO =
 /** Tiempo máximo de espera por cada intento de registro (ms). */
 const ESPERA_REGISTRO_MS = 9000;
 
-export function Configurator({ whatsapp }: { whatsapp: string }) {
+export function Configurator({
+  whatsapp,
+  catalogo,
+}: {
+  whatsapp: string;
+  catalogo: CatalogoTienda;
+}) {
+  const tiposPiel = catalogo.tiposPiel;
+  const propiedadesDe = (nombre: string) =>
+    catalogo.aceites.find((a) => a.nombre === nombre)?.propiedades ?? "";
   // ====== Selección en curso (el "constructor" de una línea) ======
   const [piel, setPiel] = useState<TipoPiel | null>(null);
   const [aceite, setAceite] = useState<string | null>(null);
@@ -327,7 +335,7 @@ export function Configurator({ whatsapp }: { whatsapp: string }) {
                 descripcion="Define qué aceites y aromas te convienen."
               />
               <div className="grid gap-3 sm:grid-cols-2">
-                {TIPOS_PIEL.map((t) => {
+                {tiposPiel.map((t) => {
                   const activo = piel?.id === t.id;
                   return (
                     <button
@@ -391,7 +399,9 @@ export function Configurator({ whatsapp }: { whatsapp: string }) {
                 }
                 atenuado={!piel}
               />
-              {piel ? (
+              {piel && piel.aceites.length === 0 ? (
+                <MarcadorPendiente texto="Por ahora no hay aceites disponibles para este tipo de piel." />
+              ) : piel ? (
                 <div className="grid gap-3 sm:grid-cols-2">
                   {piel.aceites.map((nombreAceite) => {
                     const activo = aceite === nombreAceite;
