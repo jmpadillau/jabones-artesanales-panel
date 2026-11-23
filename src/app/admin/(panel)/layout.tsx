@@ -6,6 +6,7 @@ import {
   BarChart3,
   Coins,
   ExternalLink,
+  Flower2,
   LayoutDashboard,
   LogOut,
   Package,
@@ -22,6 +23,7 @@ export const metadata: Metadata = {
 const ENLACES = [
   { href: "/admin", label: "Resumen", icon: LayoutDashboard },
   { href: "/admin/pedidos", label: "Pedidos", icon: Package },
+  { href: "/admin/catalogo", label: "Catálogo", icon: Flower2 },
   { href: "/admin/costos", label: "Costos", icon: Coins },
   { href: "/admin/ganancias", label: "Ganancias", icon: BarChart3 },
   { href: "/admin/ajustes", label: "Ajustes", icon: Settings },
