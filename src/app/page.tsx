@@ -5,20 +5,25 @@ import { GuiaBotanica } from "@/components/site/guia-botanica";
 import { InfoPagos } from "@/components/site/info-pagos";
 import { Footer } from "@/components/site/footer";
 import { numeroWhatsappTienda } from "@/lib/ajustes";
+import { obtenerCatalogoTienda } from "@/lib/catalogo";
 
 // La tienda se genera en cada visita para usar siempre el número de
-// WhatsApp vigente (Panel → Ajustes) y cualquier otro ajuste del sitio.
+// WhatsApp vigente (Panel → Ajustes), el catálogo de aceites y aromas
+// (Panel → Catálogo) y cualquier otro ajuste del sitio.
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const whatsapp = await numeroWhatsappTienda();
+  const [whatsapp, catalogo] = await Promise.all([
+    numeroWhatsappTienda(),
+    obtenerCatalogoTienda(),
+  ]);
 
   return (
     <div className="sitio-colibri flex min-h-screen flex-col bg-background">
       <Header whatsapp={whatsapp} />
       <main className="flex-1">
         <Hero />
-        <Configurator whatsapp={whatsapp} />
+        <Configurator whatsapp={whatsapp} catalogo={catalogo} />
         <GuiaBotanica />
         <InfoPagos />
       </main>
