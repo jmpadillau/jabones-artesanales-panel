@@ -8,6 +8,9 @@
  * cambio a TODAS las líneas del pedido a la vez. El estado, las notas y las
  * marcas de tiempo se mantienen sincronizados entre líneas.
  *
+ * Estatus por jabón (estadoItem): al pasar el pedido a Realizado o Entregado
+ * todas sus líneas quedan Realizado; al volver a Pendiente se reinician.
+ *
  * Flujo de estados: Pendiente → Realizado → Entregado (+ Cancelado).
  * Cada transición guarda su marca de tiempo:
  *   creadoEn (Pendiente) · realizadoEn · entregadoEn · canceladoEn.
@@ -59,6 +62,8 @@ export async function PATCH(
       entregadoEn?: Date | null;
       canceladoEn?: Date | null;
       notasAdmin?: string;
+      estadoItem?: string;
+      itemRealizadoEn?: Date | null;
     } = {};
 
     if (datos.notasAdmin !== undefined) data.notasAdmin = datos.notasAdmin;
@@ -103,7 +108,21 @@ export async function PATCH(
       }
     }
 
-    await db.pedido.updateMany({ where: { id: { in: ids } }, data });
+    const ahoraItems = new Date();
+    let previa = null;
+    if (datos.estado === "Realizado" || datos.estado === "Entregado") {
+      // Las líneas que aún no tenían fecha de realizado la reciben ahora.
+      previa = db.pedido.updateMany({
+        where: { id: { in: ids }, itemRealizadoEn: null },
+        data: { itemRealizadoEn: ahoraItems },
+      });
+      data.estadoItem = "Realizado";
+    } else if (datos.estado === "Pendiente") {
+      data.estadoItem = "Pendiente";
+      data.itemRealizadoEn = null;
+    }
+    const principal = db.pedido.updateMany({ where: { id: { in: ids } }, data });
+    await db.$transaction(previa ? [previa, principal] : [principal]);
     return NextResponse.json({ ok: true, lineas: ids.length });
   } catch (error) {
     if (error instanceof z.ZodError) {
