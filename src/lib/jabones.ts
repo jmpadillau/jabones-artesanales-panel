@@ -183,6 +183,63 @@ export const ACEITES: Aceite[] = [
   },
 ];
 
+/** Aceite del catálogo dinámico (tabla AceiteEsencial): incluye los tipos de
+ *  piel a los que se ofrece. */
+export interface AceiteCatalogo extends Aceite {
+  id: string;
+  pieles: PielId[];
+}
+
+/** Aroma del catálogo dinámico (tabla Aroma). */
+export interface AromaCatalogo extends Aroma {
+  id: string;
+}
+
+/** Catálogo completo que ve el cliente en la tienda. */
+export interface CatalogoTienda {
+  tiposPiel: TipoPiel[];
+  aceites: Aceite[];
+  aromas: Aroma[];
+}
+
+export const IDS_PIEL: PielId[] = ["seca", "grasa", "madura", "sensible"];
+
+/** Convierte "seca,grasa" → ["seca","grasa"] (ignora valores desconocidos). */
+export function pielesDesdeTexto(texto: string | null | undefined): PielId[] {
+  const set = new Set((texto ?? "").split(",").map((x) => x.trim()));
+  return IDS_PIEL.filter((id) => set.has(id));
+}
+
+/** Arma el catálogo de la tienda a partir de aceites y aromas (de la base de
+ *  datos o de los valores por defecto). Cada tipo de piel ofrece los aceites
+ *  que lo incluyen, en el orden recibido, y todos los aromas. */
+export function construirCatalogo(
+  aceites: { nombre: string; propiedades: string; pieles: PielId[] }[],
+  aromas: Aroma[]
+): CatalogoTienda {
+  return {
+    aceites: aceites.map((a) => ({ nombre: a.nombre, propiedades: a.propiedades })),
+    aromas,
+    tiposPiel: TIPOS_PIEL.map((t) => ({
+      ...t,
+      aceites: aceites.filter((a) => a.pieles.includes(t.id)).map((a) => a.nombre),
+      aromas: aromas.map((a) => a.nombre),
+    })),
+  };
+}
+
+/** Catálogo por defecto (valores originales de By-Sil). */
+export function catalogoPorDefecto(): CatalogoTienda {
+  return construirCatalogo(
+    ACEITES.map((a) => ({
+      nombre: a.nombre,
+      propiedades: a.propiedades,
+      pieles: pielesDeAceite(a.nombre),
+    })),
+    AROMAS
+  );
+}
+
 /** Devuelve las propiedades de un aceite por su nombre. */
 export function propiedadesDe(nombre: string): string {
   return ACEITES.find((a) => a.nombre === nombre)?.propiedades ?? "";
