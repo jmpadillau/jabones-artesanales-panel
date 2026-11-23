@@ -35,6 +35,12 @@ model Pedido {
   precioUnit      Int       @default(0)
   total           Int       @default(0)
   notasAdmin      String    @default("")
+  // Estatus de producción de ESTA línea (un jabón o grupo de jabones iguales):
+  // Pendiente | Realizado. Cuando todas las líneas de un pedido pasan a
+  // Realizado, el pedido completo pasa a Realizado (y se revierte si se
+  // desmarca alguna). Ver src/app/api/admin/pedidos/[id]/item/route.ts
+  estadoItem      String    @default("Pendiente")
+  itemRealizadoEn DateTime?
   creadoEn        DateTime  @default(now())
   realizadoEn     DateTime?
   entregadoEn     DateTime?
@@ -87,4 +93,31 @@ model Ajuste {
   actualizadoEn DateTime @updatedAt
 
   @@map("ajustes")
+}
+
+// Aceites esenciales disponibles en la tienda (editables desde Panel → Catálogo).
+// `pieles` guarda los ids de los tipos de piel compatibles separados por comas
+// (seca,grasa,madura,sensible): así el esquema es idéntico en SQLite y PostgreSQL.
+model AceiteEsencial {
+  id            String   @id @default(cuid())
+  nombre        String   @unique
+  propiedades   String   @default("")
+  pieles        String   @default("")
+  orden         Int      @default(0)
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  @@map("aceites_esenciales")
+}
+
+// Aromas disponibles en la tienda (editables desde Panel → Catálogo).
+model Aroma {
+  id            String   @id @default(cuid())
+  nombre        String   @unique
+  descripcion   String   @default("")
+  orden         Int      @default(0)
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  @@map("aromas")
 }
